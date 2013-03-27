@@ -6,3 +6,6 @@
 *.o
 .classpath
 .project
+lib
+modules/wycs/src/wycs/lang/Types.java
+modules/wycs/src/wycs/solver/Solver.java
