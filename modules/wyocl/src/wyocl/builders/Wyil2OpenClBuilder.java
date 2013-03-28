@@ -28,6 +28,7 @@ package wyocl.builders;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.List;
 
 import wybs.lang.Builder;
@@ -38,19 +39,19 @@ import wybs.util.Pair;
 import wyil.lang.Block;
 import wyil.lang.Code;
 import wyil.lang.WyilFile;
-import wyjvm.lang.ClassFile;
+import wyil.lang.Block.Entry;
+import wyocl.filter.LoopFilter;
 import wyocl.lang.ClFile;
 
 public class Wyil2OpenClBuilder implements Builder {
 	
 	private Logger logger = Logger.NULL;
 	
-	/** 	
-	 * The endLabel is used to determine when we're within a for loop being
-	 * writed in OpenCL. If this is <code>null</code> then we're *not*
-	 * within a for loop. Otherwise, we are.
+	/**
+	 * This Filter is used to find bodies of loops which have been determined to
+	 * be parallelisable and output them to a OpenCL kernel
 	 */
-	private String endLabel;
+	private LoopFilter loopFilter;
 	
 	public Wyil2OpenClBuilder() {
 		
@@ -95,17 +96,18 @@ public class Wyil2OpenClBuilder implements Builder {
 		// ========================================================================
 
 		long endTime = System.currentTimeMillis();
-		logger.logTimedMessage("Wyil => Open CL: compiled " + delta.size()
-				+ " file(s)", endTime - start, memory - runtime.freeMemory());
+		logger.logTimedMessage("Wyil => Open CL: compiled " + delta.size() + " file(s)", endTime - start, memory - runtime.freeMemory());
 	}	
 	
 	protected ClFile build(WyilFile module) {
+		loopFilter = new LoopFilter(module.id());
 		StringWriter writer = new StringWriter();
 		PrintWriter pWriter = new PrintWriter(writer);
 		pWriter.println("// Automatically generated from " + module.filename());
 		for(WyilFile.MethodDeclaration method : module.methods()) {				
 			build(method,pWriter);			
-		}		
+		}
+		loopFilter = null;
 		return new ClFile(writer.toString());
 	}
 	
@@ -115,13 +117,11 @@ public class Wyil2OpenClBuilder implements Builder {
 		}
 	}
 		
-	protected void write(WyilFile.Case c, WyilFile.MethodDeclaration method,
-			PrintWriter writer) {
+	protected void write(WyilFile.Case c, WyilFile.MethodDeclaration method, PrintWriter writer) {
 		write(c.body(),c,method,writer);
 	}
 	
-	protected void write(Block b, WyilFile.Case c,
-			WyilFile.MethodDeclaration method, PrintWriter writer) {
+	protected void write(Block b, WyilFile.Case c, WyilFile.MethodDeclaration method, PrintWriter writer) {
 		for(Block.Entry e : b) {
 			write(e,c,method,writer);
 		}
@@ -129,23 +129,31 @@ public class Wyil2OpenClBuilder implements Builder {
 	
 	protected static int kid = 0;
 	
-	protected void write(Block.Entry entry, WyilFile.Case c,
-			WyilFile.MethodDeclaration method, PrintWriter writer) {
+	protected void write(Block.Entry entry, WyilFile.Case c, WyilFile.MethodDeclaration method, PrintWriter writer) {
 		Code code = entry.code;
-		if(code instanceof Code.Label) {
-			Code.Label lab = (Code.Label) code;
-			if(lab.label.equals(endLabel)) {
-				// hit
-				writer.println("}");
-				endLabel = null;
-			}
-		} else if(code instanceof Code.ForAll) {
-			Code.ForAll fall = (Code.ForAll) code;
-			endLabel = fall.target;
-			writer.println("void kernel_" + kid + "() {");
-			kid = kid + 1;
-		} else if (endLabel != null) {
-			writer.println("\t// " + code);
+		
+		switch(loopFilter.filter(entry)) {
+			case SKIP:
+			case DEFAULT:
+				break;
+			case FILTER_RESULTS_READY:
+				if(loopFilter.wasLoopFiltered()) {
+					writeOpenCLKernel(loopFilter.getFilteredEntries(), writer);
+				}
+				break;
 		}
+	}
+
+	private void writeOpenCLKernel(ArrayList<Entry> filteredEntries, PrintWriter writer) {
+		writer.println("void kernel_" + kid + "() {");
+		kid = kid + 1;
+		
+		for(int n=1;n<filteredEntries.size()-1;n++) {
+			Block.Entry entry = filteredEntries.get(n);
+			
+			writer.println("\t// " + entry.code);
+		}
+		
+		writer.println("}");
 	}
 }

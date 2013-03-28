@@ -4,9 +4,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 import wyil.lang.Code;
+import wyil.lang.WyilFile;
 import wyil.lang.Block.Entry;
-import wyjc.*;
 import wyjvm.lang.Bytecode;
+import wyjvm.lang.ClassFile;
+import wyocl.filter.LoopFilter;
 
 /**
  * A builder for compiling Wyil files into a combination of Java and OpenCL.
@@ -18,45 +20,40 @@ import wyjvm.lang.Bytecode;
  */
 public class Wyil2JavaBuilder extends wyjc.Wyil2JavaBuilder {
 	/**
-	 * The endLabel is used to determine when we're within a for loop being
-	 * translated in OpenCL. If this is <code>null</code> then we're *not*
-	 * within a for loop. Otherwise, we are.
+	 * This Filter is used to strip out loops which have been determined to
+	 * be parallelisable and replace them with code which will invoke the
+	 * appropriate OpenCL kernel
 	 */
-	private String endLabel;
+	private LoopFilter loopFilter;
+	
+	@Override
+	protected ClassFile build(WyilFile module) {
+		loopFilter = new LoopFilter(module.id());
+		ClassFile result = super.build(module);
+		loopFilter = null;
+		return result;
+	}
 	
 	protected int translate(Entry entry, int freeSlot,
 			HashMap<JvmConstant, Integer> constants,
 			ArrayList<UnresolvedHandler> handlers, ArrayList<Bytecode> bytecodes) {
 		Code code = entry.code;
 		
-		// Check to see whether we're at the end of our for loop.
-		if(code instanceof Code.Label) {
-			Code.Label lab = (Code.Label) code;
-			if(lab.label.equals(endLabel)) {
-				// hit
-				endLabel = null;
-				return freeSlot; // skip it
-			}
+		switch(loopFilter.filter(entry)) {
+			case SKIP:
+				return freeSlot;
+			case DEFAULT:
+				return super.translate(entry, freeSlot, constants, handlers, bytecodes);
+			case FILTER_RESULTS_READY:
+				// Replay all the replacement entries through our superclasses implementation.
+				int replacementFreeSlot = freeSlot;
+				for(Entry replacementEntry : loopFilter.getReplacementEntries()) {
+					replacementFreeSlot = super.translate(replacementEntry, replacementFreeSlot, constants, handlers, bytecodes);
+				}
+				return replacementFreeSlot;
 		}
 		
-		if (endLabel != null) {
-			// skip this bytecode.
-			
-			// TODO: add bytecodes which call the required method to invoke the
-			// corresponding kernel.
-			
-			return freeSlot;
-		} else {
-			return super.translate(entry, freeSlot, constants, handlers,
-					bytecodes);
-		}
-	}
-
-	@Override
-	protected int translate(Code.ForAll c, int freeSlot,
-			ArrayList<Bytecode> bytecodes) {
-		endLabel = c.target;
-		// return super.translate(c, freeSlot, bytecodes);
+		// I don't see how we can possibly get here? Compiler wants it however.
 		return freeSlot;
 	}
 }
