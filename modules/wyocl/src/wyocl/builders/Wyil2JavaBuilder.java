@@ -3,9 +3,12 @@ package wyocl.builders;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import wyil.lang.Block;
 import wyil.lang.Code;
 import wyil.lang.WyilFile;
 import wyil.lang.Block.Entry;
+import wyjvm.attributes.LineNumberTable;
+import wyjvm.attributes.Code.Handler;
 import wyjvm.lang.Bytecode;
 import wyjvm.lang.ClassFile;
 import wyocl.filter.LoopFilter;
@@ -32,6 +35,15 @@ public class Wyil2JavaBuilder extends wyjc.Wyil2JavaBuilder {
 		ClassFile result = super.build(module);
 		loopFilter = null;
 		return result;
+	}
+	public void translate(Block blk, int freeSlot,
+			HashMap<JvmConstant, Integer> constants,
+			ArrayList<Handler> handlers,
+			ArrayList<LineNumberTable.Entry> lineNumbers,
+			ArrayList<Bytecode> bytecodes) {
+		loopFilter.beginBlock(blk);
+		super.translate(blk, freeSlot, constants, handlers, lineNumbers, bytecodes);
+		loopFilter.endBlock();
 	}
 	
 	protected int translate(Entry entry, int freeSlot,

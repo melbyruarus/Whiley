@@ -44,7 +44,7 @@ WHILEY_CLASSPATH=$CLASSPATH
 
 for lib in $LIBS
 do
-    tmp=$(echo $LIBDIR/${lib}-v*.jar)
+    tmp=$(echo $LIBDIR/${lib}-*.jar)
     JAR=${tmp##* }
     case "$JAR" in 
     *\**)
@@ -62,7 +62,7 @@ done
 tmp=$(echo $LIBDIR/wyrt-v*.jar)
 case "$tmp" in
 *\**)
-    echo "wyjc.jar not found" >&2
+    echo "wyrt.jar not found" >&2
     exit 2
     ;;
 esac

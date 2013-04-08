@@ -96,7 +96,7 @@ public class Wyil2OpenClBuilder implements Builder {
 		// ========================================================================
 
 		long endTime = System.currentTimeMillis();
-		logger.logTimedMessage("Wyil => Open CL: compiled " + delta.size() + " file(s)", endTime - start, memory - runtime.freeMemory());
+		logger.logTimedMessage("Wyil => OpenCL: compiled " + delta.size() + " file(s)", endTime - start, memory - runtime.freeMemory());
 	}	
 	
 	protected ClFile build(WyilFile module) {
@@ -122,9 +122,11 @@ public class Wyil2OpenClBuilder implements Builder {
 	}
 	
 	protected void write(Block b, WyilFile.Case c, WyilFile.MethodDeclaration method, PrintWriter writer) {
+		loopFilter.beginBlock(b);
 		for(Block.Entry e : b) {
 			write(e,c,method,writer);
 		}
+		loopFilter.endBlock();
 	}
 	
 	protected static int kid = 0;
