@@ -2,8 +2,8 @@ package whiley.gpgpu.OpenCL;
 
 import org.jocl.*;
 
-import whiley.gpu.OpenCL.Events.*;
-import whiley.gpu.OpenCL.Exceptions.*;
+import whiley.gpgpu.OpenCL.Events.*;
+import whiley.gpgpu.OpenCL.Exceptions.*;
 import static org.jocl.CL.*;
 
 public class Buffer extends AbstractOpenCLObject {

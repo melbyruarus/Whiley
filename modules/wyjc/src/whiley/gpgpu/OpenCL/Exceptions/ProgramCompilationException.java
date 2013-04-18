@@ -1,10 +1,10 @@
-package whiley.gpu.OpenCL.Exceptions;
+package whiley.gpgpu.OpenCL.Exceptions;
 
 import java.io.StringWriter;
 import java.nio.charset.Charset;
 import java.util.Map;
 
-import whiley.gpu.OpenCL.Devices.Device;
+import whiley.gpgpu.OpenCL.Devices.Device;
 
 
 public class ProgramCompilationException extends OpenCLException {
@@ -29,7 +29,7 @@ public class ProgramCompilationException extends OpenCLException {
 	}
 	
 	public ProgramCompilationException(int reason, Map<Device, byte[]> logs, String source[]) {
-		super(reason, "Failed to build program executable.\n: ===========\n" + descriptionFromLogs(logs) + descriptionFromSourceCode(source));
+		super(reason, "Failed to build program executable:\n" + descriptionFromLogs(logs) + "\n" + descriptionFromSourceCode(source));
 	}
 
 	private static String descriptionFromLogs(Map<Device, byte[]> logs) {

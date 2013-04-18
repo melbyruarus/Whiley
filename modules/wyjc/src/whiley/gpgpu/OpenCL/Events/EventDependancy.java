@@ -1,4 +1,4 @@
-package whiley.gpu.OpenCL.Events;
+package whiley.gpgpu.OpenCL.Events;
 
 import org.jocl.cl_event;
 

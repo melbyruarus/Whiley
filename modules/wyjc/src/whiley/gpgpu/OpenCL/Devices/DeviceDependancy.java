@@ -1,4 +1,4 @@
-package whiley.gpu.OpenCL.Devices;
+package whiley.gpgpu.OpenCL.Devices;
 
 import org.jocl.cl_device_id;
 

@@ -5,8 +5,8 @@ import static org.jocl.CL.*;
 
 import org.jocl.*;
 
-import whiley.gpu.OpenCL.Devices.*;
-import whiley.gpu.OpenCL.Exceptions.*;
+import whiley.gpgpu.OpenCL.Devices.*;
+import whiley.gpgpu.OpenCL.Exceptions.*;
 
 public class Context extends AbstractOpenCLObject {
 	private cl_context context;

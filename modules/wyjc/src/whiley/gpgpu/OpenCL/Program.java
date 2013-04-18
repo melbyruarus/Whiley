@@ -6,8 +6,8 @@ import java.util.Map;
 
 import org.jocl.*;
 
-import whiley.gpu.OpenCL.Devices.*;
-import whiley.gpu.OpenCL.Exceptions.*;
+import whiley.gpgpu.OpenCL.Devices.*;
+import whiley.gpgpu.OpenCL.Exceptions.*;
 import static org.jocl.CL.*;
 
 public class Program extends AbstractOpenCLObject {

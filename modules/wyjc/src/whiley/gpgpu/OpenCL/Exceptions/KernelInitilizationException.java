@@ -1,4 +1,4 @@
-package whiley.gpu.OpenCL.Exceptions;
+package whiley.gpgpu.OpenCL.Exceptions;
 
 public class KernelInitilizationException extends OpenCLException {
 	private static final long serialVersionUID = 1L;

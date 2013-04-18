@@ -1,4 +1,4 @@
-package whiley.gpu.OpenCL.Exceptions;
+package whiley.gpgpu.OpenCL.Exceptions;
 
 import static org.jocl.CL.*;
 

@@ -1,8 +1,9 @@
-package whiley.gpu.OpenCL.Devices;
+package whiley.gpgpu.OpenCL.Devices;
 
 import java.util.Iterator;
 
 import org.jocl.*;
+import static org.jocl.CL.*;
 
 public class Device implements DeviceDependancy {
 	private final cl_device_id deviceId;
@@ -62,5 +63,11 @@ public class Device implements DeviceDependancy {
 				throw new UnsupportedOperationException();
 			}
 		};
+	}
+
+	public boolean isLittleEndian() {
+		int[] data = new int[1];
+		clGetDeviceInfo(deviceId, CL_DEVICE_ENDIAN_LITTLE, Integer.SIZE/Byte.SIZE, Pointer.to(data), null);
+		return data[0] != 0;
 	}
 }

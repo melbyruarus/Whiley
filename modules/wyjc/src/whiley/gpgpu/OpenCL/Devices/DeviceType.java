@@ -1,4 +1,4 @@
-package whiley.gpu.OpenCL.Devices;
+package whiley.gpgpu.OpenCL.Devices;
 
 import static org.jocl.CL.*;
 

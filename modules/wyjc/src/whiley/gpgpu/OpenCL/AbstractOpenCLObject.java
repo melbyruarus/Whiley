@@ -15,5 +15,5 @@ public abstract class AbstractOpenCLObject implements OpenCLObject {
 		}
 	}
 	
-	abstract void dealloc();
+	protected abstract void dealloc();
 }

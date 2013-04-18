@@ -1,11 +1,13 @@
-package whiley.gpu.OpenCL.Events;
+package whiley.gpgpu.OpenCL.Events;
 
 import java.util.Iterator;
 
 import org.jocl.cl_event;
+
+import whiley.gpgpu.OpenCL.AbstractOpenCLObject;
 import static org.jocl.CL.*;
 
-public class Event implements EventDependancy {
+public class Event extends AbstractOpenCLObject implements EventDependancy {
 	private final cl_event event = new cl_event();
 	private cl_event eventArray[] = null;
 
@@ -30,8 +32,11 @@ public class Event implements EventDependancy {
 		return eventArray;
 	}
 
-	public void release() {
-		clReleaseEvent(event);
+	@Override
+	protected void dealloc() {
+		if(event != null) {
+			clReleaseEvent(event);
+		}
 	}
 
 	@Override

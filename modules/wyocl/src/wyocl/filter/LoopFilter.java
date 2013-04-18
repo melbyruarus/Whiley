@@ -1,17 +1,21 @@
 package wyocl.filter;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 
 import wybs.lang.NameID;
 import wybs.lang.Path.ID;
 import wybs.util.Trie;
 import wyil.lang.Block;
 import wyil.lang.Code;
-import wyil.lang.Code.AbstractAssignable;
+import wyil.lang.Constant;
 import wyil.lang.Type;
+import wyjc.runtime.WyType;
 
 public class LoopFilter {
 	/**
@@ -30,6 +34,7 @@ public class LoopFilter {
 	 */
 	private ArrayList<Block.Entry> filteredEntries;
 	private ArrayList<Block.Entry> replacementEntries;
+	private ArrayList<Argument> kernelArguments;
 	private int indexRegister;
 	
 	private ArrayList<Type> executeGPUCodeFunctionArgumentTypes = new ArrayList<Type>() {
@@ -37,13 +42,36 @@ public class LoopFilter {
 
 		{
 			this.add(Type.List(Type.T_ANY, false));
-			this.add(Type.List(Type.T_ANY, false));
 		}
 	};
-	private Type.FunctionOrMethod executeGPUCodeFunctionType = Type.FunctionOrMethod.Function(Type.T_VOID, Type.T_VOID, executeGPUCodeFunctionArgumentTypes);
+	private Type.FunctionOrMethod executeGPUCodeFunctionType = Type.FunctionOrMethod.Function(Type.List(Type.T_ANY, false), Type.T_VOID, executeGPUCodeFunctionArgumentTypes);
 	private NameID executeGPUCodeFunctionPath = new NameID(Trie.fromString("whiley/gpgpu/Util"), "executeWYGPUKernel");
 	
 	private Block currentBlock;
+	
+	public static class Argument implements Comparable<Argument> {
+		public final Type type;
+		public final int register;
+		private boolean readonly = true;
+		
+		private Argument(Object type, int register) {
+			this.type = (Type)type;
+			this.register = register;
+		}
+		
+		@Override
+		public int compareTo(Argument arg0) {
+			return register - arg0.register;
+		}
+
+		public boolean isReadonly() {
+			return readonly;
+		}
+
+		public void setReadonly(boolean readonly) {
+			this.readonly = readonly;
+		}
+	}
 	
 	public LoopFilter(ID id) {
 		StringBuilder sb = new StringBuilder();
@@ -117,17 +145,19 @@ public class LoopFilter {
 		replacementEntries = new ArrayList<Block.Entry>();
 		
 		Code.ForAll forAll = (Code.ForAll)filteredEntries.get(0).code;
-		HashSet<Integer> modifiedRegisters = new HashSet<Integer>();
-		forAll.registers(modifiedRegisters);
-		// TODO: this only works with foralls, and maybe not all foralls (what happens if source get modified?)
-		modifiedRegisters.remove(forAll.sourceOperand);
-		modifiedRegisters.remove(forAll.indexOperand);
+		// TODO: Check source isn't modified?
 		
-		HashSet<Integer> readWriteRegisterSet = new HashSet<Integer>();
-		determineReadWriteRegisters(readWriteRegisterSet, modifiedRegisters);
-		ArrayList<Integer> readWriteRegisters = new ArrayList<Integer>();
-		readWriteRegisters.addAll(readWriteRegisterSet);
-		Collections.sort(readWriteRegisters); // Ensure that arguments order is deterministic
+		kernelArguments = new ArrayList<Argument>();
+		checkLoopForGPGPUCompatability(kernelArguments);
+		Collections.sort(kernelArguments);
+		kernelArguments.add(0, new Argument(forAll.type, forAll.sourceOperand));
+				
+		ArrayList<Integer> argumentRegisters = new ArrayList<Integer>();
+		for(Argument arg : kernelArguments) {
+			argumentRegisters.add(arg.register);
+		}
+		
+		// TODO: actually output marshaling and unmarshaling code here? Avoids cost of function call, wrapping/unwrapping multiple times and type tests
 		
 		setIndexRegister(forAll.indexOperand);
 		
@@ -144,36 +174,112 @@ public class LoopFilter {
 		
 		// TODO: check modifiedRegisters.size()
 		
-		replacementEntries.add(new Block.Entry(Code.NewList(Type.List(Type.T_ANY, false), 100, readWriteRegisters))); // FIXME: don't hard code target
+		final int temporaryListRegister = 100; // FIXME: don't hard code target
+		final int temporaryCounterRegister = 101; // FIXME: don't hard code
+		
+		replacementEntries.add(new Block.Entry(Code.NewList(Type.List(Type.T_ANY, false), temporaryListRegister, argumentRegisters)));
 		
 		ArrayList<Integer> argumentsToFunction = new ArrayList<Integer>();
-		argumentsToFunction.add(forAll.sourceOperand);
-		argumentsToFunction.add(100);
-		replacementEntries.add(new Block.Entry(Code.Invoke(executeGPUCodeFunctionType, Code.NULL_REG, argumentsToFunction, executeGPUCodeFunctionPath)));
+		argumentsToFunction.add(temporaryListRegister);
+		replacementEntries.add(new Block.Entry(Code.Invoke(executeGPUCodeFunctionType, temporaryListRegister, argumentsToFunction, executeGPUCodeFunctionPath)));
+		
+		int count = 0;
+		for(Argument arg : kernelArguments) {
+			replacementEntries.add(new Block.Entry(Code.Const(temporaryCounterRegister, Constant.V_INTEGER(BigInteger.valueOf(count)))));
+			replacementEntries.add(new Block.Entry(Code.IndexOf(Type.List(arg.type, true), arg.register, temporaryListRegister, temporaryCounterRegister)));
+			count++;
+		}
 	}
 	
-	private void determineReadWriteRegisters(HashSet<Integer> readWriteRegisters, HashSet<Integer> modifiedRegisters) {
-		for(Block.Entry e : currentBlock) {
-			if(e.equals(filteredEntries.get(0))) {
-				break;
-			}
-			
-			// TODO: will all registers which are written by the loop be assigned to beforehand?
-			// i.e. determine scope
-			// we could read after end label and see if read before written
-			
-			// TODO: Check which are read before written inside loop.
-			// TODO: Check which are read outside loop before being overwritten
-			
-			Code code = e.code;
-			if(code instanceof AbstractAssignable) {
-				int target = ((AbstractAssignable)code).target;
+	private boolean checkLoopForGPGPUCompatability(List<Argument> arguments) {
+		boolean startedLoop = false;
+		boolean finishedLoop = false;
+		
+		HashSet<Integer> possibleInputs = new HashSet<Integer>();
+		HashSet<Integer> possibleOutputs = new HashSet<Integer>();
+		HashSet<Integer> readRegistersInLoop = new HashSet<Integer>();
+		HashSet<Integer> writtenRegistersInLoop = new HashSet<Integer>();
+		HashSet<Integer> writtenRegistersAfterLoop = new HashSet<Integer>();
+		
+		HashMap<Integer, Type> typesAtStartOfLoop = new HashMap<Integer, Type>();
+		HashMap<Integer, Type> typesAtEndOfLoop = new HashMap<Integer, Type>();
 				
-				if(modifiedRegisters.contains(target)) {
-					readWriteRegisters.add(target);
+		for(Block.Entry e : currentBlock) {
+			Code code = e.code;
+						
+			if(!startedLoop) { // Before loop
+				if(e.equals(filteredEntries.get(0))) {
+					startedLoop = true;
+					continue;
 				}
+				
+				HashSet<Integer> written = new HashSet<Integer>();
+				ModifiedRegisterAnalysis.getModifiedRegisters(code, null, written);
+				ModifiedRegisterAnalysis.getAssignedType(code, typesAtStartOfLoop);
+				possibleInputs.addAll(written);
+				possibleOutputs.addAll(written);
 			}
+			else if(!finishedLoop) { // Inside loop
+				if(e.equals(filteredEntries.get(filteredEntries.size()-1))) {
+					finishedLoop = true;
+					continue;
+				}
+				
+				HashSet<Integer> read = new HashSet<Integer>();
+				HashSet<Integer> written = new HashSet<Integer>();
+				ModifiedRegisterAnalysis.getModifiedRegisters(code, read, written);
+				ModifiedRegisterAnalysis.getAssignedType(code, typesAtEndOfLoop);
+				// This code must occur before writtenRegistersInLoop.add(...)
+				for(int reg : read) {
+					if(!writtenRegistersInLoop.contains(reg)) {
+						readRegistersInLoop.add(reg);
+					}
+				}
+				writtenRegistersInLoop.addAll(written);
+			}
+			else { // After loop
+				HashSet<Integer> read = new HashSet<Integer>();
+				HashSet<Integer> written = new HashSet<Integer>();
+				ModifiedRegisterAnalysis.getModifiedRegisters(code, read, written);
+				// This code must occur before writtenRegistersInLoop.add(...)
+				for(int reg : read) {
+					if(!writtenRegistersAfterLoop.contains(reg)) {
+						possibleOutputs.add(reg);
+					}
+				}
+				writtenRegistersAfterLoop.addAll(written);
+			}
+			
+			// TODO: check for data dependencies
 		}
+		
+		// Compute inputs and outputs
+		HashSet<Integer> outputs = new HashSet<Integer>(writtenRegistersInLoop);
+		outputs.retainAll(possibleOutputs);
+		HashSet<Integer> inputs = new HashSet<Integer>(readRegistersInLoop);
+		inputs.retainAll(possibleInputs);
+		
+		// Compile argument set
+		HashMap<Integer, Argument> dependancies = new HashMap<Integer, Argument>();
+		
+		for(int reg : inputs) {
+			dependancies.put(reg, new Argument(typesAtStartOfLoop.get(reg), reg));
+		}
+		for(int reg : outputs) {
+			Argument arg = dependancies.get(reg);
+			
+			if(arg == null) {
+				arg = new Argument(typesAtEndOfLoop.get(reg), reg);
+				dependancies.put(reg, arg);
+			}
+			
+			arg.setReadonly(false);
+		}
+		
+		// Return results
+		arguments.addAll(dependancies.values());
+		
+		return true;
 	}
 
 	/**
@@ -187,11 +293,11 @@ public class LoopFilter {
 	 * 
 	 * @return
 	 */
-	public ArrayList<Block.Entry> getReplacementEntries() {
+	public List<Block.Entry> getReplacementEntries() {
 		return replacementEntries;
 	}
 	
-	public ArrayList<Block.Entry> getFilteredEntries() {
+	public List<Block.Entry> getFilteredEntries() {
 		return filteredEntries;
 	}
 	
@@ -213,5 +319,9 @@ public class LoopFilter {
 
 	public void setIndexRegister(int indexRegister) {
 		this.indexRegister = indexRegister;
+	}
+	
+	public List<Argument> getKernelArguments() {
+		return kernelArguments;
 	}
 }

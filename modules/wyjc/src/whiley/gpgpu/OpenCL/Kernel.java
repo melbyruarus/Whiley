@@ -3,16 +3,14 @@ package whiley.gpgpu.OpenCL;
 
 import org.jocl.*;
 
-import whiley.gpu.OpenCL.Devices.Device;
-import whiley.gpu.OpenCL.Events.*;
-import whiley.gpu.OpenCL.Exceptions.KernelArgumentException;
-import whiley.gpu.OpenCL.Exceptions.KernelAttributeException;
-import whiley.gpu.OpenCL.Exceptions.KernelExecutionException;
-import whiley.gpu.OpenCL.Exceptions.KernelInitilizationException;
+import whiley.gpgpu.OpenCL.Devices.Device;
+import whiley.gpgpu.OpenCL.Events.*;
+import whiley.gpgpu.OpenCL.Exceptions.*;
 import static org.jocl.CL.*;
 
 public class Kernel extends AbstractOpenCLObject {
 	private final Program program;
+
 	private final String kernelName;
 	private cl_kernel kernel;
 	
@@ -100,5 +98,9 @@ public class Kernel extends AbstractOpenCLObject {
 		}
 		
 		return localWorkGroupSize[0];
+	}
+	
+	public Program getProgram() {
+		return program;
 	}
 }

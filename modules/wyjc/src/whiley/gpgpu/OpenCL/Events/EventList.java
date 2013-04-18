@@ -1,13 +1,15 @@
-package whiley.gpu.OpenCL.Events;
+package whiley.gpgpu.OpenCL.Events;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
 import org.jocl.*;
+
+import whiley.gpgpu.OpenCL.AbstractOpenCLObject;
 import static org.jocl.CL.*;
 
-public class EventList implements EventDependancy {
+public class EventList extends AbstractOpenCLObject implements EventDependancy {
 	private final List<Event> events = new ArrayList<Event>();
 	private boolean validCachedArray = true;
 	private cl_event[] cachedArray = new cl_event[0];
@@ -32,12 +34,15 @@ public class EventList implements EventDependancy {
 	}
 	
 	public void add(Event e) {
+		e.retain();
 		events.add(e);
 		validCachedArray = false;
 	}
 	
 	public void remove(Event e) {
-		events.remove(e);
+		if(events.remove(e)) {
+			e.release();
+		}
 		validCachedArray = false;
 	}
 	
@@ -52,5 +57,12 @@ public class EventList implements EventDependancy {
 	@Override
 	public Iterator<Event> iterator() {
 		return events.iterator();
+	}
+	
+	@Override
+	protected void dealloc() {
+		for(Event e : events) {
+			e.release();
+		}
 	}
 }

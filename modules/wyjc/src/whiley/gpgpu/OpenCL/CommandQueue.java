@@ -5,10 +5,9 @@ import static org.jocl.CL.*;
 
 import org.jocl.*;
 
-import whiley.gpu.OpenCL.Devices.Device;
-import whiley.gpu.OpenCL.Events.Event;
-import whiley.gpu.OpenCL.Events.EventList;
-import whiley.gpu.OpenCL.Exceptions.*;
+import whiley.gpgpu.OpenCL.Devices.*;
+import whiley.gpgpu.OpenCL.Events.*;
+import whiley.gpgpu.OpenCL.Exceptions.*;
 
 public class CommandQueue extends AbstractOpenCLObject {
 	private cl_command_queue commandQueue;

@@ -1,4 +1,4 @@
-package whiley.gpu.OpenCL.Devices;
+package whiley.gpgpu.OpenCL.Devices;
 
 import static org.jocl.CL.*;
 
@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import whiley.gpu.OpenCL.Exceptions.*;
+import whiley.gpgpu.OpenCL.Exceptions.*;
 
 import org.jocl.*;
 

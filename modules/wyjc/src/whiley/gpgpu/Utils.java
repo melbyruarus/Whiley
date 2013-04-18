@@ -18,7 +18,7 @@ public class Utils {
 	}
 	
 	public static String fileAsString(String filename) throws IOException {
-		InputStream inputStream = new FileInputStream(new File("Mandelbrot.cl"));
+		InputStream inputStream = new FileInputStream(new File(filename));
 		
 		return readInputStreamAsString(inputStream);
 	}
