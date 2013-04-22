@@ -28,28 +28,21 @@ package wyocl.builders;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.HashMap;
 import java.util.List;
-
 import wybs.lang.Builder;
 import wybs.lang.Logger;
 import wybs.lang.NameSpace;
 import wybs.lang.Path;
 import wybs.util.Pair;
 import wyil.lang.Block;
-import wyil.lang.Code;
-import wyil.lang.Type;
-import wyil.lang.Type.Int;
-import wyil.lang.Type.Real;
 import wyil.lang.WyilFile;
-import wyil.lang.Block.Entry;
 import wyocl.filter.LoopFilter;
 import wyocl.lang.ClFile;
+import wyocl.openclwriter.OpenCLOpWriter;
 
 public class Wyil2OpenClBuilder implements Builder {
-	
 	private Logger logger = Logger.NULL;
-	
+		
 	/**
 	 * This Filter is used to find bodies of loops which have been determined to
 	 * be parallelisable and output them to a OpenCL kernel
@@ -69,6 +62,7 @@ public class Wyil2OpenClBuilder implements Builder {
 		this.logger = logger;
 	}	
 		
+	@SuppressWarnings("unchecked")
 	public void build(List<Pair<Path.Entry<?>,Path.Entry<?>>> delta) throws IOException {
 
 		Runtime runtime = Runtime.getRuntime();
@@ -107,6 +101,7 @@ public class Wyil2OpenClBuilder implements Builder {
 		StringWriter writer = new StringWriter();
 		PrintWriter pWriter = new PrintWriter(writer);
 		pWriter.println("// Automatically generated from " + module.filename());
+		OpenCLOpWriter.writeRuntime(pWriter);
 		for(WyilFile.MethodDeclaration method : module.methods()) {				
 			build(method,pWriter);			
 		}
@@ -134,9 +129,7 @@ public class Wyil2OpenClBuilder implements Builder {
 	
 	protected static int kid = 0;
 	
-	protected void write(Block.Entry entry, WyilFile.Case c, WyilFile.MethodDeclaration method, PrintWriter writer) {
-		Code code = entry.code;
-		
+	protected void write(Block.Entry entry, WyilFile.Case c, WyilFile.MethodDeclaration method, PrintWriter writer) {		
 		switch(loopFilter.filter(entry)) {
 			case SKIP:
 			case DEFAULT:
@@ -149,9 +142,8 @@ public class Wyil2OpenClBuilder implements Builder {
 		}
 	}
 
-	private void writeOpenCLKernel(List<Entry> filteredEntries, List<LoopFilter.Argument> kernelArguments, PrintWriter writer) {
-		// Eventually this wont be string, it'll be something else
-		HashMap<Integer, String> arguments = new HashMap<Integer, String>();
+	private void writeOpenCLKernel(List<Block.Entry> filteredEntries, List<LoopFilter.Argument> kernelArguments, PrintWriter writer) {
+		OpenCLOpWriter opWriter = new OpenCLOpWriter(writer);
 		
 		writer.print("__kernel void whiley_gpgpu_func_"+kid+"(");
 		kid = kid + 1;
@@ -162,66 +154,13 @@ public class Wyil2OpenClBuilder implements Builder {
 			writer.print(seperator);
 			seperator = ", ";
 			
-			writeKernelArgument(arg, arguments, nextArgumentNumber, writer);
-			nextArgumentNumber++;
+			opWriter.typeWriter.writeKernelArgDecl(arg);
 		}
 		
 		writer.print(") {\n");
-		
-		writer.println("	int whiley_gpgpu_job_id = get_global_id(0);\n" +
-"	int whiley_gpgpu_arg_0_size = whiley_gpgpu_arg_0?((int *)whiley_gpgpu_arg_0)[0]:0;\n" +
-"	whiley_gpgpu_arg_0 = (__global int *)(((int *)whiley_gpgpu_arg_0) + 1);\n" +
-"\n" +
-"	*whiley_gpgpu_arg_1 += whiley_gpgpu_arg_0[whiley_gpgpu_job_id];\n"+
-"	whiley_gpgpu_arg_0[whiley_gpgpu_job_id] = *whiley_gpgpu_arg_1;\n");
+		opWriter.writePreamble();
+		opWriter.writeBlock(filteredEntries);
 		
 		writer.println("}");
-	}
-
-	private void writeKernelArgument(LoopFilter.Argument arg, HashMap<Integer, String> arguments, int nextArgumentNumber, PrintWriter writer) {
-		if(arg.type instanceof Type.List) {
-			writeKernelArgument((Type.List)arg.type, arg.isReadonly(), arguments, nextArgumentNumber, writer);
-		}
-		else if(arg.type instanceof Type.Leaf) {
-			writeKernelArgument((Type.Leaf)arg.type, arg.isReadonly(), arguments, nextArgumentNumber, writer);
-		}
-		else {
-			throw new RuntimeException("Unknown type encountered when constructing kernel arguments: "+arg.type);
-		}
-	}
-	
-	private String convertPrimitive(Type.Leaf type) {
-		if(type instanceof Type.Int) {
-			return "int";
-		}
-		else if(type instanceof Type.Real) {
-			return "float";
-		}
-		else {
-			throw new RuntimeException("Unknown primitive type encountered: "+type);
-		}
-	}
-
-	private void writeKernelArgument(Type.Leaf type, boolean readonly, HashMap<Integer, String> arguments, int nextArgumentNumber, PrintWriter writer) {
-		if(!readonly) {
-			writer.print("__global ");
-		}
-		writer.print(convertPrimitive(type));
-		writer.print(' ');
-		if(!readonly) {
-			writer.print('*');
-		}
-		writer.print("whiley_gpgpu_arg_");
-		writer.print(nextArgumentNumber);
-	}
-
-	private void writeKernelArgument(Type.List type, boolean readonly, HashMap<Integer, String> arguments, int nextArgumentNumber, PrintWriter writer) {
-		writer.print("__global ");
-		if(!(type.element() instanceof Type.Leaf)) {
-			throw new RuntimeException("Currently only support lists of primitive types, don't support: "+type);
-		}
-		writer.print(convertPrimitive((Type.Leaf)type.element()));
-		writer.print(" *whiley_gpgpu_arg_");
-		writer.print(nextArgumentNumber);
 	}
 }

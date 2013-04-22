@@ -29,7 +29,6 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 
@@ -153,6 +152,7 @@ public class Util$native {
 		}
 	}
 
+	@SuppressWarnings("unchecked")
 	private static void getArgument(CommandQueue q, final BigInteger whileyObject, Buffer memory, Event waitOn, EventList readEvents, HashSet<Runnable> onCompletions, ByteOrder byteOrder, final WyList resultArray) throws MemoryException {
 		int bufferSize = sizeofType(whileyObject.getClass());
 		final ByteBuffer buffer = ByteBuffer.allocate(bufferSize).order(byteOrder);
@@ -171,6 +171,7 @@ public class Util$native {
 		});
 	}
 
+	@SuppressWarnings("unchecked")
 	private static void getArgument(CommandQueue q, final WyRat whileyObject, Buffer memory, Event waitOn, EventList readEvents, HashSet<Runnable> onCompletions, ByteOrder byteOrder, final WyList resultArray) throws MemoryException {
 		int bufferSize = sizeofType(whileyObject.getClass());
 		final ByteBuffer buffer = ByteBuffer.allocate(bufferSize).order(byteOrder);
@@ -189,6 +190,7 @@ public class Util$native {
 		});
 	}
 
+	@SuppressWarnings("unchecked")
 	private static void getArgument(CommandQueue q, final WyList whileyObject, Buffer memory, Event waitOn, EventList readEvents, HashSet<Runnable> onCompletions, ByteOrder byteOrder, WyList resultArray) throws MemoryException {
 		// TODO: support empty array
 		
@@ -203,6 +205,7 @@ public class Util$native {
 		onCompletions.add(new Runnable() {
 			@Override
 			public void run() {
+				@SuppressWarnings("rawtypes")
 				Class type = whileyObject.get(0).getClass();
 				whileyObject.clear();
 				
@@ -218,7 +221,7 @@ public class Util$native {
 					}
 				}
 				else {
-					throw new RuntimeException("Non marshabale type encountered: "+type);
+					throw new RuntimeException("Non unmarshabale type encountered: "+type);
 				}
 			}
 		});
@@ -242,6 +245,7 @@ public class Util$native {
 	private static void setArgument(int argumentNumber, Kernel kernel, CommandQueue q, WyList list, List<GPUReferenceArgument> argumentsToRelease, EventDependancy waitOn, EventList writeEvents, ByteOrder byteOrder) throws MemoryException, KernelArgumentException {
 		if(list.size() > 0) {
 			Object element0 = list.get(0);
+			@SuppressWarnings("rawtypes")
 			Class type = element0.getClass();
 			
 			for(Object o : list) {
@@ -314,11 +318,7 @@ public class Util$native {
 		}
 	}
 
-	private static void writeObjectToBytes(WyList list, ByteBuffer buffer) {
-		Object element0 = list.get(0);
-		Class type = element0.getClass();
-		int typeSize = sizeofType(type);
-		
+	private static void writeObjectToBytes(WyList list, ByteBuffer buffer) {		
 		buffer.putInt(list.size()); // FIXME: this assumes lots about the format of cl_int
 		
 		for(Object o : list) {
@@ -336,6 +336,7 @@ public class Util$native {
 
 	private static int sizeofObject(WyList list) {
 		Object element0 = list.get(0);
+		@SuppressWarnings("rawtypes")
 		Class type = element0.getClass();
 		
 		int typeSize = sizeofType(type);
@@ -344,7 +345,7 @@ public class Util$native {
 		return totalSize;
 	}
 
-	private static int sizeofType(Class type) {
+	private static int sizeofType(@SuppressWarnings("rawtypes") Class type) {
 		if(type == WyRat.class) {
 			return Sizeof.cl_mem;
 		}

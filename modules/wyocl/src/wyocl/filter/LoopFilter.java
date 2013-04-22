@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 
 import wybs.lang.NameID;
@@ -149,6 +150,17 @@ public class LoopFilter {
 		
 		kernelArguments = new ArrayList<Argument>();
 		checkLoopForGPGPUCompatability(kernelArguments);
+		// Remove possible duplication of the kernel argument
+		Iterator<Argument> it = kernelArguments.iterator();
+		while(it.hasNext()) {
+			Argument arg = it.next();
+			if(arg.register == forAll.sourceOperand) {
+				if(!arg.readonly) {
+					throw new RuntimeException("GPU cannot loop over an array that is being simultaniously updated");
+				}
+				it.remove();
+			}
+		}
 		Collections.sort(kernelArguments);
 		kernelArguments.add(0, new Argument(forAll.type, forAll.sourceOperand));
 				
