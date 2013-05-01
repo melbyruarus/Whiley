@@ -1,14 +1,21 @@
 package wyocl.openclwriter;
 
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.List;
 
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
+import wybs.util.Pair;
 import wyil.lang.Block;
 import wyil.lang.Code;
+import wyil.lang.Code.Comparator;
 import wyil.lang.Code.ForAll;
+import wyil.lang.Code.UnArithKind;
+import wyil.lang.Code.UnArithOp;
+import wyil.lang.Constant;
 import wyil.lang.Type;
+import wyil.lang.Type.Leaf;
 import wyocl.openclwriter.OpenCLTypeWriter.ExpressionWriter;
 
 public class OpenCLOpWriter {
@@ -17,6 +24,8 @@ public class OpenCLOpWriter {
 	public final OpenCLTypeWriter typeWriter = new OpenCLTypeWriter(this);
 	private int indentationLevel = 1;
 	protected final PrintWriter writer;
+	private ArrayList<String> scopeEndLabels = new ArrayList<String>();
+	private int forallIndexCount = 0;
 	
 	public static void writeRuntime(PrintWriter writer) { // TODO: this should be loaded in from a file or something
 		writer.println();
@@ -60,6 +69,7 @@ public class OpenCLOpWriter {
 		}
 		
 		for(Block.Entry e : filteredEntries) {
+			System.out.println(e.code);
 			writeBlockEntry(e);
 		}
 	}
@@ -89,9 +99,6 @@ public class OpenCLOpWriter {
 		}
 		else if(code instanceof Code.Goto) {
 			writeCode((Code.Goto)code);
-		}
-		else if(code instanceof Code.LoopEnd) { // Must be before Code.Label
-			writeCode((Code.LoopEnd)code);
 		}
 		else if(code instanceof Code.TryEnd) { // Must be before Code.Label
 			writeCode((Code.TryEnd)code);
@@ -204,8 +211,14 @@ public class OpenCLOpWriter {
 		else if(code instanceof Code.BinStringOp) {
 			writeCode((Code.BinStringOp)code);
 		}
+		else if(code instanceof Code.UnArithOp) {
+			writeCode((Code.UnArithOp)code);
+		}
+		else {
+			throw new RuntimeException("Unknown bytecode encountered: "+code+" ("+code.getClass()+")");
+		}
 	}
-	
+
 	protected void writeIndents() {
 		for(int i=0;i<indentationLevel;i++) {
 			writer.print('\t');
@@ -293,14 +306,112 @@ public class OpenCLOpWriter {
 		writer.print(')');
 	}
 	
+	private void writePrimitiveUnArithOp(UnArithKind kind, Leaf type, ExpressionWriter expressionWriter) {
+		writer.print('(');
+		switch(kind) {
+			case NEG:
+				writer.print('-');
+				expressionWriter.writeExpression(writer);
+				break;
+			case DENOMINATOR:
+				throw new NotImplementedException();
+			case NUMERATOR:
+				throw new NotImplementedException();
+		}
+		writer.print(')');
+	}
+	
+	private void writeComparitor(Comparator op, int leftOperand, int rightOperand) {
+		writer.print('(');
+		switch(op) {
+			case SUBSET:
+				throw new NotImplementedException();
+			case SUBSETEQ:
+				throw new NotImplementedException();
+			case ELEMOF:
+				throw new NotImplementedException();
+			case EQ:
+				typeWriter.writeRHS(leftOperand);
+				writer.print(" == ");
+				typeWriter.writeRHS(rightOperand);
+				break;
+			case GT:
+				typeWriter.writeRHS(leftOperand);
+				writer.print(" > ");
+				typeWriter.writeRHS(rightOperand);
+				break;
+			case GTEQ:
+				typeWriter.writeRHS(leftOperand);
+				writer.print(" >= ");
+				typeWriter.writeRHS(rightOperand);
+				break;
+			case LT:
+				typeWriter.writeRHS(leftOperand);
+				writer.print(" < ");
+				typeWriter.writeRHS(rightOperand);
+				break;
+			case LTEQ:
+				typeWriter.writeRHS(leftOperand);
+				writer.print(" <= ");
+				typeWriter.writeRHS(rightOperand);
+				break;
+			case NEQ:
+				typeWriter.writeRHS(leftOperand);
+				writer.print(" != ");
+				typeWriter.writeRHS(rightOperand);
+				break;
+		}
+		writer.print(')');
+	}
+	
+	private void beginScope(String scopeEnd) {
+		indentationLevel++;
+		scopeEndLabels.add(scopeEnd);
+	}
+	
+	private void checkEndScope(Code.Label code) {
+		while(scopeEndLabels.contains(code.label)) {
+			indentationLevel--;
+			writeIndents();
+			writer.print('}');
+			writeLineEnd(code, false);
+			scopeEndLabels.remove(code.label);
+		}
+	}
+	
 	private void writeLineEnd(Code code) {
+		writeLineEnd(code, true);
+	}
+	
+	private void writeLineEnd(Code code, boolean semicolon) {
+		if(semicolon) {
+			writer.print(';');
+		}
+		
 		if(WRITE_BYTECODES_TO_COMMENTS) {
-			writer.print("; // ");
+			writer.print(" // ");
 			writer.println(code);
 		}
 		else {
-			writer.println(';');
+			writer.print('\n');
 		}
+	}
+	
+	private void writeCode(final UnArithOp code) {
+		if(!(code.type instanceof Type.Leaf)){
+			throw new RuntimeException("Dont know how to handle nonleaf types for UnArithOp: "+code.type);
+		}
+		
+		writeIndents();
+		typeWriter.writeLHS(code.target, code.type);
+		writer.print(" = ");
+		writePrimitiveUnArithOp(code.kind, (Type.Leaf)code.type, new ExpressionWriter() {
+			@Override
+			public void writeExpression(PrintWriter writer) {
+				typeWriter.writeRHS(code.operand);
+			}
+		});
+		writeLineEnd(code);
 	}
 
 	private void writeCode(Code.BinStringOp code) {
@@ -376,7 +487,23 @@ public class OpenCLOpWriter {
 	}
 
 	private void writeCode(Code.Switch code) {
-		throw new NotImplementedException();
+		writeIndents();
+		for(Pair<Constant, String> caseStatement : code.branches) {
+			writer.print("if(");
+			writer.print(caseStatement.first());
+			writer.print(" == ");
+			typeWriter.writeRHS(code.operand);
+			writer.print(") { goto ");
+			writer.print(caseStatement.second());
+			writer.print("; }");
+			writeLineEnd(code, false);
+			writeIndents();
+			writer.print("else ");
+		}
+		writer.print("{ goto ");
+		writer.print(code.defaultTarget);
+		writer.print("; }");
+		writeLineEnd(code, false);
 	}
 
 	private void writeCode(Code.SubString code) {
@@ -403,27 +530,27 @@ public class OpenCLOpWriter {
 	}
 
 	private void writeCode(Code.NewTuple code) {
-		throw new NotImplementedException();
+		throw new BytecodeNotSupportedByGPGPU();
 	}
 
 	private void writeCode(Code.NewSet code) {
-		throw new NotImplementedException();
+		throw new BytecodeNotSupportedByGPGPU();
 	}
 
 	private void writeCode(Code.NewRecord code) {
-		throw new NotImplementedException();
+		throw new BytecodeNotSupportedByGPGPU();
 	}
 
 	private void writeCode(Code.NewMap code) {
-		throw new NotImplementedException();
+		throw new BytecodeNotSupportedByGPGPU();
 	}
 
 	private void writeCode(Code.NewObject code) {
-		throw new NotImplementedException();
+		throw new BytecodeNotSupportedByGPGPU();
 	}
 
 	private void writeCode(Code.NewList code) {
-		throw new NotImplementedException();
+		throw new BytecodeNotSupportedByGPGPU();
 	}
 
 	private void writeCode(Code.Move code) {
@@ -480,10 +607,13 @@ public class OpenCLOpWriter {
 	}
 
 	private void writeCode(Code.If code) {
-		// TODO Auto-generated method stub
-		
 		writeIndents();
-		writeLineEnd(code);
+		writer.print("if(");
+		writeComparitor(code.op, code.leftOperand, code.rightOperand);
+		writer.print(") { goto ");
+		writer.print(code.target);
+		writer.print("; }");
+		writeLineEnd(code, false);
 	}
 
 	private void writeCode(Code.FieldLoad code) {
@@ -494,7 +624,7 @@ public class OpenCLOpWriter {
 		// TODO Auto-generated method stub
 		
 		writeIndents();
-		writeLineEnd(code);
+		writeLineEnd(code, false);
 	}
 
 	private void writeCode(Code.Dereference code) {
@@ -520,20 +650,21 @@ public class OpenCLOpWriter {
 	private void writeCode(Code.Assert code) {
 		// TODO Auto-generated method stub
 		
-				writeIndents();
-				writeLineEnd(code);
+		writeIndents();
+		writeLineEnd(code, false);
 	}
 
 	private void writeCode(Code.Label code) {
+		checkEndScope(code);
 		writer.print(code.label);
 		writer.print(':');
-		writeLineEnd(code);
+		writeLineEnd(code); // Good to write a semicolon, means we always have a statement to jump to
 	}
 
 	private void writeCode(Code.Goto code) {
-		// TODO Auto-generated method stub
-		
 		writeIndents();
+		writer.print("goto ");
+		writer.print(code.target);
 		writeLineEnd(code);
 	}
 
@@ -555,22 +686,39 @@ public class OpenCLOpWriter {
 	}
 
 	private void writeCode(Code.Loop code) {
-		// TODO Auto-generated method stub
-		
 		writeIndents();
-		writeLineEnd(code);
-	}
-	
-	private void writeCode(Code.LoopEnd code) {
-		writer.print(code.label);
-		writer.print(':');
-		writeLineEnd(code);
+		writer.print("while(1) {");
+		writeLineEnd(code, false);
+		beginScope(code.target);
 	}
 
 	private void writeCode(Code.ForAll code) {
-		// TODO Auto-generated method stub
-		
+		// Write loop
 		writeIndents();
+		forallIndexCount++;
+		final String indexVar = "forallIndex"+forallIndexCount;
+		writer.print("for(int ");
+		writer.print(indexVar);
+		writer.print(" = 0; ");
+		writer.print(indexVar);
+		writer.print(" < ");
+		typeWriter.writeListLength(code.sourceOperand);
+		writer.print("; ++");
+		writer.print(indexVar);
+		writer.print(") {");
+		beginScope(code.target);
+		writeLineEnd(code, false);
+		
+		// Write whiley index variable - i.e. use indexVar to access from source
+		writeIndents();
+		typeWriter.writeLHS(code.indexOperand, code.type.element());
+		writer.print(" = ");
+		typeWriter.writeListAccessor(code.sourceOperand, new ExpressionWriter() {
+			@Override
+			public void writeExpression(PrintWriter writer) {
+				writer.print(indexVar);
+			}
+		});
 		writeLineEnd(code);
 	}
 	
