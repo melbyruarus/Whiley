@@ -16,6 +16,7 @@ import wyil.lang.Code.UnArithOp;
 import wyil.lang.Constant;
 import wyil.lang.Type;
 import wyil.lang.Type.Leaf;
+import wyocl.filter.Argument;
 import wyocl.openclwriter.OpenCLTypeWriter.ExpressionWriter;
 
 public class OpenCLOpWriter {
@@ -26,17 +27,33 @@ public class OpenCLOpWriter {
 	protected final PrintWriter writer;
 	private ArrayList<String> scopeEndLabels = new ArrayList<String>();
 	private int forallIndexCount = 0;
+	private final FunctionInvokeTranslator functionTranslator;
+	
+	public interface FunctionInvokeTranslator {
+		/**
+		 * The OpWriter will call this method when it encounters a invoke bytecode
+		 * and requires a translation of the function name from WYIL to OpenCL.
+		 * It is the responsibility of the implementer of this method to ensure
+		 * that a function with a matching name and type signature exists in the OpenCL
+		 * file. The appropriate place to write these called functions is when this 
+		 * method is called.
+		 * 
+		 * @param code The bytecode of the function invoke
+		 * @return The name of the translated function
+		 */
+		public String translateFunctionName(Code.Invoke code);
+	}
 	
 	public static void writeRuntime(PrintWriter writer) { // TODO: this should be loaded in from a file or something
 		writer.println();
 		writer.println("// Beginning whiley GPGPU runtime library");
-		writer.println("int whiley_gpgpu_runtime_rem_int(int lhs, int rhs) { return (lhs - rhs * (lhs / rhs)); }");
 		writer.println("// Ending whiley GPGPU runtime library");
 		writer.println();
 	}
 	
-	public OpenCLOpWriter(PrintWriter writer) {
+	public OpenCLOpWriter(PrintWriter writer, FunctionInvokeTranslator functionTranslator) {
 		this.writer = writer;
+		this.functionTranslator = functionTranslator;
 	}
 
 	public void writeBlock(List<Block.Entry> filteredEntries) {
@@ -294,14 +311,11 @@ public class OpenCLOpWriter {
 			case RANGE:
 				throw new NotImplementedException();
 			case REM:
-				writer.print(GPGPU_RUNTIME_PREFIX);
-				writer.print("rem");
-				writer.print(OpenCLTypeWriter.primitiveType(type));
-				writer.print('(');
 				lhs.writeExpression(writer);
-				writer.print(", ");
+				writer.print(' ');
+				writer.print("&");
+				writer.print(' ');
 				rhs.writeExpression(writer);
-				writer.print(')');
 		}
 		writer.print(')');
 	}
@@ -314,9 +328,9 @@ public class OpenCLOpWriter {
 				expressionWriter.writeExpression(writer);
 				break;
 			case DENOMINATOR:
-				throw new NotImplementedException();
+				throw new NotSupportedByGPGPUException();
 			case NUMERATOR:
-				throw new NotImplementedException();
+				throw new NotSupportedByGPGPUException();
 		}
 		writer.print(')');
 	}
@@ -478,8 +492,17 @@ public class OpenCLOpWriter {
 		}
 	}
 
-	private void writeCode(Code.TupleLoad code) {
-		throw new NotImplementedException();
+	private void writeCode(final Code.TupleLoad code) {
+		writeIndents();
+		typeWriter.writeLHS(code.target, code.type.element(code.index));
+		writer.print(" = ");
+		typeWriter.writeTupleAccessor(code.operand, new ExpressionWriter() {
+			@Override
+			public void writeExpression(PrintWriter writer) {
+				writer.print(code.index);
+			}
+		});
+		writeLineEnd(code);
 	}
 
 	private void writeCode(Code.Throw code) {
@@ -530,27 +553,27 @@ public class OpenCLOpWriter {
 	}
 
 	private void writeCode(Code.NewTuple code) {
-		throw new BytecodeNotSupportedByGPGPU();
+		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
 	private void writeCode(Code.NewSet code) {
-		throw new BytecodeNotSupportedByGPGPU();
+		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
 	private void writeCode(Code.NewRecord code) {
-		throw new BytecodeNotSupportedByGPGPU();
+		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
 	private void writeCode(Code.NewMap code) {
-		throw new BytecodeNotSupportedByGPGPU();
+		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
 	private void writeCode(Code.NewObject code) {
-		throw new BytecodeNotSupportedByGPGPU();
+		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
 	private void writeCode(Code.NewList code) {
-		throw new BytecodeNotSupportedByGPGPU();
+		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
 	private void writeCode(Code.Move code) {
@@ -574,7 +597,21 @@ public class OpenCLOpWriter {
 	}
 
 	private void writeCode(Code.Invoke code) {
-		throw new NotImplementedException();
+		writeIndents();
+		if(code.type.ret() != Type.T_VOID) {
+			typeWriter.writeLHS(code.target, code.type.ret());
+			writer.print(" = ");
+		}
+		writer.print(functionTranslator.translateFunctionName(code));
+		writer.print('(');
+		String sep = "";
+		for(int arg : code.operands) {
+			writer.print(sep);
+			sep = ", ";
+			typeWriter.writeRHS(arg);
+		}
+		writer.print(')');
+		writeLineEnd(code);
 	}
 
 	private void writeCode(Code.Invert code) {
@@ -586,7 +623,7 @@ public class OpenCLOpWriter {
 	}
 
 	private void writeCode(Code.IndirectInvoke code) {
-		throw new NotImplementedException();
+		throw new NotSupportedByGPGPUException("Function pointers not supported");
 	}
 
 	private void writeCode(final Code.IndexOf code) {
@@ -724,5 +761,26 @@ public class OpenCLOpWriter {
 	
 	public void writePreamble() {
 		typeWriter.writeOutstandingBoilerplate();
+	}
+	
+	public void writeFunctionDecleration(String attributes, Type.Leaf type, String name, List<Argument> arguments) {
+		if(attributes != null) {
+			writer.print(attributes);
+			writer.print(' ');
+		}
+		typeWriter.writeReturnType(type);
+		writer.print(' ');
+		writer.print(name);
+		writer.print('(');
+		
+		String seperator = "";
+		for(Argument arg : arguments) {
+			writer.print(seperator);
+			seperator = ", ";
+			
+			typeWriter.writeArgDecl(arg);
+		}
+		
+		writer.print(')');
 	}
 }

@@ -50,30 +50,6 @@ public class LoopFilter {
 	
 	private Block currentBlock;
 	
-	public static class Argument implements Comparable<Argument> {
-		public final Type type;
-		public final int register;
-		private boolean readonly = true;
-		
-		private Argument(Object type, int register) {
-			this.type = (Type)type;
-			this.register = register;
-		}
-		
-		@Override
-		public int compareTo(Argument arg0) {
-			return register - arg0.register;
-		}
-
-		public boolean isReadonly() {
-			return readonly;
-		}
-
-		public void setReadonly(boolean readonly) {
-			this.readonly = readonly;
-		}
-	}
-	
 	public LoopFilter(ID id) {
 		StringBuilder sb = new StringBuilder();
 		for(String s : id) {
