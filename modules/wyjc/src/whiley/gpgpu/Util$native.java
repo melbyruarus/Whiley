@@ -61,8 +61,8 @@ public class Util$native {
 		}
 	}
 
-	public static WyList executeWYGPUKernel(WyList arguments) {
-		System.out.println("Arguments: " + arguments);
+	public static WyList executeWYGPUKernel(String moduleName, WyList arguments) {
+		System.err.println("Module name: "+moduleName+ ", Arguments: " + arguments);
 
 		try {
 			long start = System.currentTimeMillis();
@@ -74,12 +74,12 @@ public class Util$native {
 			}
 
 			Device device = devices.get(0);
-			System.out.println("Is little endian: " + device.isLittleEndian());
+			System.err.println("Is little endian: " + device.isLittleEndian());
 			ByteOrder byteOrder = device.isLittleEndian() ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
 			Context c = new Context(devices);
 			CommandQueue q = new CommandQueue(c, device);
 			Program p = new Program(c);
-			p.loadSource(new String[] { Utils.fileAsString("test.cl") });
+			p.loadSource(new String[] { Utils.fileAsString(moduleName+".cl") });
 			p.compileForDevices(devices);
 			Kernel k = new Kernel(p, "whiley_gpgpu_func_0");
 
@@ -114,7 +114,7 @@ public class Util$native {
 				r.run();
 			}
 
-			System.out.println("Computation took: " + (System.currentTimeMillis() - start) / 1000.0f);
+			System.err.println("Computation took: " + (System.currentTimeMillis() - start) / 1000.0f);
 
 			// ------------------------ End computation
 			// -------------------------

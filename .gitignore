@@ -4,6 +4,7 @@
 *~
 *.c
 *.o
+*.cl
 .classpath
 .project
 lib

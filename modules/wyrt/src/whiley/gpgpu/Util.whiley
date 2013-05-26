@@ -25,4 +25,4 @@
 
 package whiley.gpgpu
 
-public native [any] executeWYGPUKernel([any] arguments):
+public native [any] executeWYGPUKernel(string moduleName, [any] arguments):

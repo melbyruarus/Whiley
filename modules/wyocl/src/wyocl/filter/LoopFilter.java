@@ -2,7 +2,6 @@ package wyocl.filter;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -16,7 +15,6 @@ import wyil.lang.Block;
 import wyil.lang.Code;
 import wyil.lang.Constant;
 import wyil.lang.Type;
-import wyjc.runtime.WyType;
 
 public class LoopFilter {
 	/**
@@ -42,6 +40,7 @@ public class LoopFilter {
 		private static final long serialVersionUID = 1L;
 
 		{
+			this.add(Type.T_STRING);
 			this.add(Type.List(Type.T_ANY, false));
 		}
 	};
@@ -51,12 +50,7 @@ public class LoopFilter {
 	private Block currentBlock;
 	
 	public LoopFilter(ID id) {
-		StringBuilder sb = new StringBuilder();
-		for(String s : id) {
-			sb.append('_');
-			sb.append(s.replaceAll("[^a-z,A-Z]", "_"));
-		}
-		modulePath = sb.toString();
+		modulePath = id.toString();
 	}
 
 	public FilterAction filter(Block.Entry entry) {
@@ -153,21 +147,19 @@ public class LoopFilter {
 		// or reused (written to before being read)
 		
 		// TODO: figure out the dependencies between loops
-		
-		// TODO: has register usage been optimized by this point? does it make a difference?
-		
+				
 		// TODO: we're going to have to adjust all the registers used in the stored code
 		// We could do that by just always +1 when calling filter for the first time - is there a limit to the number of registers?
 		// Does this introduce problems?
-		
-		// TODO: check modifiedRegisters.size()
-		
+				
 		final int temporaryListRegister = 100; // FIXME: don't hard code target
 		final int temporaryCounterRegister = 101; // FIXME: don't hard code
+		final int temporaryModuleNameRegister = 102; // FIXME: don't hard code
 		
 		replacementEntries.add(new Block.Entry(Code.NewList(Type.List(Type.T_ANY, false), temporaryListRegister, argumentRegisters)));
-		
+		replacementEntries.add(new Block.Entry(Code.Const(temporaryModuleNameRegister, Constant.V_STRING(modulePath))));
 		ArrayList<Integer> argumentsToFunction = new ArrayList<Integer>();
+		argumentsToFunction.add(temporaryModuleNameRegister);
 		argumentsToFunction.add(temporaryListRegister);
 		replacementEntries.add(new Block.Entry(Code.Invoke(executeGPUCodeFunctionType, temporaryListRegister, argumentsToFunction, executeGPUCodeFunctionPath)));
 		

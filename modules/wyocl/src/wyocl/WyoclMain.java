@@ -26,7 +26,6 @@
 package wyocl;
 
 import wyc.WycMain;
-import wyjc.util.WyjcBuildTask;
 import wyocl.util.WyoclBuildTask;
 
 /**

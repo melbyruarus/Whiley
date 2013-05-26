@@ -313,7 +313,7 @@ public class OpenCLOpWriter {
 			case REM:
 				lhs.writeExpression(writer);
 				writer.print(' ');
-				writer.print("&");
+				writer.print("%");
 				writer.print(' ');
 				rhs.writeExpression(writer);
 		}

@@ -181,6 +181,9 @@ public class OpenCLTypeWriter {
 		else if(type instanceof Type.Void) {
 			return "void";
 		}
+		else if(type instanceof Type.Bool) {
+			return "bool";
+		}
 		else {
 			throw new RuntimeException("Unknown primitive type encountered: "+type);
 		}
