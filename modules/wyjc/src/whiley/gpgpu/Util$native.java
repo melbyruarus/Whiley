@@ -62,8 +62,6 @@ public class Util$native {
 	}
 
 	public static WyList executeWYGPUKernel(String moduleName, WyList arguments) {
-		System.err.println("Module name: "+moduleName+ ", Arguments: " + arguments);
-
 		try {
 			long start = System.currentTimeMillis();
 
@@ -74,7 +72,6 @@ public class Util$native {
 			}
 
 			Device device = devices.get(0);
-			System.err.println("Is little endian: " + device.isLittleEndian());
 			ByteOrder byteOrder = device.isLittleEndian() ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
 			Context c = new Context(devices);
 			CommandQueue q = new CommandQueue(c, device);
@@ -113,8 +110,6 @@ public class Util$native {
 			for (Runnable r : onCompletions) {
 				r.run();
 			}
-
-			System.err.println("Computation took: " + (System.currentTimeMillis() - start) / 1000.0f);
 
 			// ------------------------ End computation
 			// -------------------------

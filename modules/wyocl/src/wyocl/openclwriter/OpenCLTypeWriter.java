@@ -1,10 +1,8 @@
 package wyocl.openclwriter;
 
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
 
 import wyil.lang.Type;
 import wyocl.filter.Argument;
@@ -12,8 +10,8 @@ import wyocl.filter.Argument;
 public class OpenCLTypeWriter {
 	private static final String VAR_PREFIX = "register_";
 	private HashMap<Integer, VariableDefn> definedVariables = new HashMap<Integer, VariableDefn>();
-	private LinkedList<String> outstandingBoilerplate = new LinkedList<String>();
-	private final OpenCLOpWriter opWriter;
+	private final StringWriter boilerPlateStringWriter = new StringWriter();
+	private final PrintWriter boilerPlateWriter = new PrintWriter(boilerPlateStringWriter);
 	
 	public interface ExpressionWriter {
 		public void writeExpression(PrintWriter writer);
@@ -26,7 +24,7 @@ public class OpenCLTypeWriter {
 			this.register = register;
 		}
 		
-		abstract public void writeDecleration(PrintWriter writer, List<String> boilerPlate);
+		abstract public void writeDecleration(PrintWriter writer, PrintWriter boilerPlateWriter);
 		abstract public void writeAccessor(PrintWriter writer);
 	}
 	
@@ -42,7 +40,7 @@ public class OpenCLTypeWriter {
 		}
 
 		@Override
-		public void writeDecleration(PrintWriter writer, List<String> boilerPlate) {
+		public void writeDecleration(PrintWriter writer, PrintWriter boilerPlateWriter) {
 			if(asPointer) {
 				writer.print("__global ");
 			}
@@ -78,7 +76,7 @@ public class OpenCLTypeWriter {
 		}
 
 		@Override
-		public void writeDecleration(PrintWriter writer, List<String> boilerPlate) {
+		public void writeDecleration(PrintWriter writer, PrintWriter boilerPlateWriter) {
 			writer.print("__global ");
 			// TODO: check for composite types
 			if(!(type.element() instanceof Type.Leaf)) {
@@ -88,10 +86,10 @@ public class OpenCLTypeWriter {
 			writer.print(" *"+VAR_PREFIX);
 			writer.print(register);
 			
-			boilerPlate.add("// Begin register "+register+" list unpacking");
-			boilerPlate.add("int "+VAR_PREFIX+register+SIZE_SUFFIX+" = "+VAR_PREFIX+register+"?((__global int *)"+VAR_PREFIX+register+")[0]:0;");
-			boilerPlate.add(VAR_PREFIX+register+" = (__global "+primitiveType((Type.Leaf)type.element())+" *)(((int *)"+VAR_PREFIX+register+") + 1);");
-			boilerPlate.add("// End register "+register+" list unpacking");
+			boilerPlateWriter.println("// Begin register "+register+" list unpacking");
+			boilerPlateWriter.println("int "+VAR_PREFIX+register+SIZE_SUFFIX+" = "+VAR_PREFIX+register+"?((__global int *)"+VAR_PREFIX+register+")[0]:0;");
+			boilerPlateWriter.println(VAR_PREFIX+register+" = (__global "+primitiveType((Type.Leaf)type.element())+" *)(((int *)"+VAR_PREFIX+register+") + 1);");
+			boilerPlateWriter.println("// End register "+register+" list unpacking");
 		}
 		
 		@Override
@@ -132,7 +130,7 @@ public class OpenCLTypeWriter {
 		}
 
 		@Override
-		public void writeDecleration(PrintWriter writer, List<String> boilerPlate) {
+		public void writeDecleration(PrintWriter writer, PrintWriter boilerPlateWriter) {
 			writer.print("__global ");
 			// TODO: check for composite types
 			if(!(type.element(0) instanceof Type.Leaf)) {
@@ -142,10 +140,10 @@ public class OpenCLTypeWriter {
 			writer.print(" *"+VAR_PREFIX);
 			writer.print(register);
 			
-			boilerPlate.add("// Begin register "+register+" tuple unpacking");
-			boilerPlate.add("int "+VAR_PREFIX+register+SIZE_SUFFIX+" = "+VAR_PREFIX+register+"?((__global int *)"+VAR_PREFIX+register+")[0]:0;");
-			boilerPlate.add(VAR_PREFIX+register+" = (__global "+primitiveType((Type.Leaf)type.element(0))+" *)(((int *)"+VAR_PREFIX+register+") + 1);");
-			boilerPlate.add("// End register "+register+" tuple unpacking");
+			boilerPlateWriter.println("// Begin register "+register+" tuple unpacking");
+			boilerPlateWriter.println("int "+VAR_PREFIX+register+SIZE_SUFFIX+" = "+VAR_PREFIX+register+"?((__global int *)"+VAR_PREFIX+register+")[0]:0;");
+			boilerPlateWriter.println(VAR_PREFIX+register+" = (__global "+primitiveType((Type.Leaf)type.element(0))+" *)(((int *)"+VAR_PREFIX+register+") + 1);");
+			boilerPlateWriter.println("// End register "+register+" tuple unpacking");
 		}
 		
 		@Override
@@ -167,10 +165,6 @@ public class OpenCLTypeWriter {
 		}
 	}
 	
-	public OpenCLTypeWriter(OpenCLOpWriter opWriter) {
-		this.opWriter = opWriter;
-	}
-
 	protected static String primitiveType(Type.Leaf type) {
 		if(type instanceof Type.Int) {
 			return "int";
@@ -189,59 +183,59 @@ public class OpenCLTypeWriter {
 		}
 	}
 	
-	public void writeArgDecl(Argument arg) {
-		writeVariableDecl(arg.type, !arg.isReadonly(), arg.register);
+	public void writeArgDecl(Argument arg, PrintWriter writer) {
+		writeVariableDecl(arg.type, !arg.isReadonly(), arg.register, writer);
 	}
 	
-	private void writeVariableDecl(Type type, boolean asPointer, int register) {
+	private void writeVariableDecl(Type type, boolean asPointer, int register, PrintWriter writer) {
 		if(type instanceof Type.List) {
-			writeVariableDecl((Type.List)type, asPointer, register);
+			writeVariableDecl((Type.List)type, asPointer, register, writer);
 		}
 		else if(type instanceof Type.Tuple) {
-			writeVariableDecl((Type.Tuple)type, asPointer, register);
+			writeVariableDecl((Type.Tuple)type, asPointer, register, writer);
 		}
 		else if(type instanceof Type.Leaf) {
-			writeVariableDecl((Type.Leaf)type, asPointer, register);
+			writeVariableDecl((Type.Leaf)type, asPointer, register, writer);
 		}
 		else {
 			throw new RuntimeException("Unknown type encountered when writing type decleration: "+type);
 		}
 	}
 	
-	private void writeVariableDecl(Type.Leaf type, boolean asPointer, int register) {
+	private void writeVariableDecl(Type.Leaf type, boolean asPointer, int register, PrintWriter writer) {
 		PrimitiveDefn prim = new PrimitiveDefn(register, type, asPointer);
-		prim.writeDecleration(opWriter.writer, outstandingBoilerplate);
+		prim.writeDecleration(writer, boilerPlateWriter);
 		definedVariables.put(register, prim);
 	}
 
-	private void writeVariableDecl(Type.List type, boolean asPointer, int register) {
+	private void writeVariableDecl(Type.List type, boolean asPointer, int register, PrintWriter writer) {
 		ListDefn list = new ListDefn(register, type);
-		list.writeDecleration(opWriter.writer, outstandingBoilerplate);
+		list.writeDecleration(writer, boilerPlateWriter);
 		definedVariables.put(register, list);
 	}
 	
-	private void writeVariableDecl(Type.Tuple type, boolean asPointer, int register) {
+	private void writeVariableDecl(Type.Tuple type, boolean asPointer, int register, PrintWriter writer) {
 		TupleDefn tuple = new TupleDefn(register, type);
-		tuple.writeDecleration(opWriter.writer, outstandingBoilerplate);
+		tuple.writeDecleration(writer, boilerPlateWriter);
 		definedVariables.put(register, tuple);
 	}
 	
-	protected void writeLHS(int target, Type type) {
+	protected void writeLHS(int target, Type type, PrintWriter writer) {
 		if(definedVariables.containsKey(target)) {
-			definedVariables.get(target).writeAccessor(opWriter.writer);
+			definedVariables.get(target).writeAccessor(writer);
 		}
 		else {
-			writeVariableDecl(type, false, target);
-			// TODO: figure this out - need a callback?
-			//writeOutstandingBoilerplate(writer);
+			writeVariableDecl(type, false, target, boilerPlateWriter);
+			boilerPlateWriter.println(";");
+			definedVariables.get(target).writeAccessor(writer);
 		}
 	}
 
-	protected void writeListAccessor(int operand, ExpressionWriter indexWriter) {
+	protected void writeListAccessor(int operand, ExpressionWriter indexWriter, PrintWriter writer) {
 		if(definedVariables.containsKey(operand)) {
 			VariableDefn var = definedVariables.get(operand);
 			if(var instanceof ListDefn) {
-				((ListDefn)var).writeAccessor(indexWriter, opWriter.writer);
+				((ListDefn)var).writeAccessor(indexWriter, writer);
 			}
 			else {
 				throw new RuntimeException("Indexing into non-list type: "+operand);
@@ -252,11 +246,11 @@ public class OpenCLTypeWriter {
 		}
 	}
 	
-	public void writeListLength(int operand) {
+	public void writeListLength(int operand, PrintWriter writer) {
 		if(definedVariables.containsKey(operand)) {
 			VariableDefn var = definedVariables.get(operand);
 			if(var instanceof ListDefn) {
-				((ListDefn)var).writeLengthAccessor(opWriter.writer);
+				((ListDefn)var).writeLengthAccessor(writer);
 			}
 			else {
 				throw new RuntimeException("Lengthof non-list type: "+operand);
@@ -267,11 +261,11 @@ public class OpenCLTypeWriter {
 		}
 	}
 	
-	protected void writeTupleAccessor(int operand, ExpressionWriter indexWriter) {
+	protected void writeTupleAccessor(int operand, ExpressionWriter indexWriter, PrintWriter writer) {
 		if(definedVariables.containsKey(operand)) {
 			VariableDefn var = definedVariables.get(operand);
 			if(var instanceof TupleDefn) {
-				((TupleDefn)var).writeAccessor(indexWriter, opWriter.writer);
+				((TupleDefn)var).writeAccessor(indexWriter, writer);
 			}
 			else {
 				throw new RuntimeException("Indexing into non-list type: "+operand);
@@ -282,31 +276,20 @@ public class OpenCLTypeWriter {
 		}
 	}
 
-	protected void writeRHS(int operand) {
+	protected void writeRHS(int operand, PrintWriter writer) {
 		if(definedVariables.containsKey(operand)) {
-			definedVariables.get(operand).writeAccessor(opWriter.writer);
+			definedVariables.get(operand).writeAccessor(writer);
 		}
 		else {
 			throw new RuntimeException("Use of undefined variable: "+operand);
 		}
 	}
-	
-	protected void writeOutstandingBoilerplate() {
-		Iterator<String> it = outstandingBoilerplate.iterator();
-		opWriter.writer.println();
-		opWriter.writeIndents();
-		opWriter.writer.println("// ------- Beginning of boilerplate -------");
-		while(it.hasNext()) {
-			opWriter.writeIndents();
-			opWriter.writer.println(it.next());
-		}
-		opWriter.writeIndents();
-		opWriter.writer.println("// ---------- End of boilerplate ----------");
-		opWriter.writer.println();
-		outstandingBoilerplate.clear();
+
+	public void writeReturnType(Type.Leaf type, PrintWriter writer) {
+		writer.print(primitiveType(type));
 	}
 
-	public void writeReturnType(Type.Leaf type) {
-		opWriter.writer.print(primitiveType(type));
+	public String boilerPlate() {
+		return boilerPlateStringWriter.toString();
 	}
 }

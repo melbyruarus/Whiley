@@ -1,6 +1,7 @@
 package wyocl.openclwriter;
 
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,9 +23,8 @@ import wyocl.openclwriter.OpenCLTypeWriter.ExpressionWriter;
 public class OpenCLOpWriter {
 	private static final String GPGPU_RUNTIME_PREFIX = "whiley_gpgpu_runtime_";
 	private static final boolean WRITE_BYTECODES_TO_COMMENTS = true;
-	public final OpenCLTypeWriter typeWriter = new OpenCLTypeWriter(this);
+	public final OpenCLTypeWriter typeWriter = new OpenCLTypeWriter();;
 	private int indentationLevel = 1;
-	protected final PrintWriter writer;
 	private ArrayList<String> scopeEndLabels = new ArrayList<String>();
 	private int forallIndexCount = 0;
 	private final FunctionInvokeTranslator functionTranslator;
@@ -51,13 +51,14 @@ public class OpenCLOpWriter {
 		writer.println();
 	}
 	
-	public OpenCLOpWriter(PrintWriter writer, FunctionInvokeTranslator functionTranslator) {
-		this.writer = writer;
+	public OpenCLOpWriter(FunctionInvokeTranslator functionTranslator) {
 		this.functionTranslator = functionTranslator;
 	}
 
-	public void writeBlock(List<Block.Entry> filteredEntries) {
+	public void writeBlock(List<Block.Entry> filteredEntries, PrintWriter bodyWriter) {
 		indentationLevel = 1;
+		StringWriter sw = new StringWriter();
+		PrintWriter writer = new PrintWriter(sw);
 		
 		if(filteredEntries.size() > 0) {
 			Block.Entry first = filteredEntries.get(0);
@@ -66,15 +67,15 @@ public class OpenCLOpWriter {
 				
 				if(first.code instanceof Code.ForAll) {
 					Code.ForAll forAll = (ForAll)first.code;
-					writeIndents();
-					typeWriter.writeLHS(forAll.indexOperand, forAll.type.element());
+					writeIndents(writer);
+					typeWriter.writeLHS(forAll.indexOperand, forAll.type.element(), writer);
 					writer.print(" = ");
 					typeWriter.writeListAccessor(forAll.sourceOperand, new ExpressionWriter() {
 						@Override
 						public void writeExpression(PrintWriter writer) {
-							writeKernelGlobalIndex(0); // TODO: Support multiple dimensions
+							writeKernelGlobalIndex(0, writer); // TODO: Support multiple dimensions
 						}
-					});
+					}, writer);
 					writer.println("; // Get work item");
 				}
 				else {
@@ -87,162 +88,163 @@ public class OpenCLOpWriter {
 		
 		for(Block.Entry e : filteredEntries) {
 			System.out.println(e.code);
-			writeBlockEntry(e);
+			writeBlockEntry(e, writer);
 		}
+		
+		bodyWriter.print(typeWriter.boilerPlate());
+		bodyWriter.print(sw.toString());
 	}
 	
-	private void writeKernelGlobalIndex(int dimension) {
+	private void writeKernelGlobalIndex(int dimension, PrintWriter writer) {
 		writer.print("get_global_id(");
 		writer.print(dimension);
 		writer.print(')');
 	}
 	
-	public void writeBlockEntry(Block.Entry entry) {
+	private void writeBlockEntry(Block.Entry entry, PrintWriter writer) {
 		Code code = entry.code;
 		if(code instanceof Code.ForAll) {
-			writeCode((Code.ForAll)code);
+			writeCode((Code.ForAll)code, writer);
 		}
 		else if(code instanceof Code.Loop) { // Must be after Code.ForAll
-			writeCode((Code.Loop)code);
+			writeCode((Code.Loop)code, writer);
 		}
 		else if(code instanceof Code.Nop) {
-			writeCode((Code.Nop)code);
+			writeCode((Code.Nop)code, writer);
 		}
 		else if(code instanceof Code.TryCatch) {
-			writeCode((Code.TryCatch)code);
+			writeCode((Code.TryCatch)code, writer);
 		}
 		else if(code instanceof Code.Const) {
-			writeCode((Code.Const)code);
+			writeCode((Code.Const)code, writer);
 		}
 		else if(code instanceof Code.Goto) {
-			writeCode((Code.Goto)code);
+			writeCode((Code.Goto)code, writer);
 		}
 		else if(code instanceof Code.TryEnd) { // Must be before Code.Label
-			writeCode((Code.TryEnd)code);
+			writeCode((Code.TryEnd)code, writer);
 		}
 		else if(code instanceof Code.Label) {
-			writeCode((Code.Label)code);
+			writeCode((Code.Label)code, writer);
 		}
 		else if(code instanceof Code.Assert) {
-			writeCode((Code.Assert)code);
+			writeCode((Code.Assert)code, writer);
 		}
 		else if(code instanceof Code.Assign) {
-			writeCode((Code.Assign)code);
+			writeCode((Code.Assign)code, writer);
 		}
 		else if(code instanceof Code.Convert) {
-			writeCode((Code.Convert)code);
+			writeCode((Code.Convert)code, writer);
 		}
 		else if(code instanceof Code.Debug) {
-			writeCode((Code.Debug)code);
+			writeCode((Code.Debug)code, writer);
 		}
 		else if(code instanceof Code.Dereference) {
-			writeCode((Code.Dereference)code);
+			writeCode((Code.Dereference)code, writer);
 		}
 		else if(code instanceof Code.Assume) {
-			writeCode((Code.Assume)code);
+			writeCode((Code.Assume)code, writer);
 		}
 		else if(code instanceof Code.FieldLoad) {
-			writeCode((Code.FieldLoad)code);
+			writeCode((Code.FieldLoad)code, writer);
 		}
 		else if(code instanceof Code.If) {
-			writeCode((Code.If)code);
+			writeCode((Code.If)code, writer);
 		}
 		else if(code instanceof Code.IfIs) {
-			writeCode((Code.IfIs)code);
+			writeCode((Code.IfIs)code, writer);
 		}
 		else if(code instanceof Code.IndexOf) {
-			writeCode((Code.IndexOf)code);
+			writeCode((Code.IndexOf)code, writer);
 		}
 		else if(code instanceof Code.IndirectInvoke) {
-			writeCode((Code.IndirectInvoke)code);
+			writeCode((Code.IndirectInvoke)code, writer);
 		}
 		else if(code instanceof Code.Invert) {
-			writeCode((Code.Invert)code);
+			writeCode((Code.Invert)code, writer);
 		}
 		else if(code instanceof Code.Invoke) {
-			writeCode((Code.Invoke)code);
+			writeCode((Code.Invoke)code, writer);
 		}
 		else if(code instanceof Code.Lambda) {
-			writeCode((Code.Lambda)code);
+			writeCode((Code.Lambda)code, writer);
 		}
 		else if(code instanceof Code.LengthOf) {
-			writeCode((Code.LengthOf)code);
+			writeCode((Code.LengthOf)code, writer);
 		}
 		else if(code instanceof Code.Move) {
-			writeCode((Code.Move)code);
+			writeCode((Code.Move)code, writer);
 		}
 		else if(code instanceof Code.NewList) {
-			writeCode((Code.NewList)code);
+			writeCode((Code.NewList)code, writer);
 		}
 		else if(code instanceof Code.NewMap) {
-			writeCode((Code.NewMap)code);
+			writeCode((Code.NewMap)code, writer);
 		}
 		else if(code instanceof Code.NewObject) {
-			writeCode((Code.NewObject)code);
+			writeCode((Code.NewObject)code, writer);
 		}
 		else if(code instanceof Code.NewRecord) {
-			writeCode((Code.NewRecord)code);
+			writeCode((Code.NewRecord)code, writer);
 		}
 		else if(code instanceof Code.NewSet) {
-			writeCode((Code.NewSet)code);
+			writeCode((Code.NewSet)code, writer);
 		}
 		else if(code instanceof Code.NewTuple) {
-			writeCode((Code.NewTuple)code);
+			writeCode((Code.NewTuple)code, writer);
 		}
 		else if(code instanceof Code.Not) {
-			writeCode((Code.Not)code);
+			writeCode((Code.Not)code, writer);
 		}
 		else if(code instanceof Code.Return) {
-			writeCode((Code.Return)code);
+			writeCode((Code.Return)code, writer);
 		}
 		else if(code instanceof Code.SubList) {
-			writeCode((Code.SubList)code);
+			writeCode((Code.SubList)code, writer);
 		}
 		else if(code instanceof Code.SubString) {
-			writeCode((Code.SubString)code);
+			writeCode((Code.SubString)code, writer);
 		}
 		else if(code instanceof Code.Switch) {
-			writeCode((Code.Switch)code);
+			writeCode((Code.Switch)code, writer);
 		}
 		else if(code instanceof Code.Throw) {
-			writeCode((Code.Throw)code);
+			writeCode((Code.Throw)code, writer);
 		}
 		else if(code instanceof Code.TupleLoad) {
-			writeCode((Code.TupleLoad)code);
+			writeCode((Code.TupleLoad)code, writer);
 		}
 		else if(code instanceof Code.Update) {
-			writeCode((Code.Update)code);
+			writeCode((Code.Update)code, writer);
 		}
 		else if(code instanceof Code.Void) {
-			writeCode((Code.Void)code);
+			writeCode((Code.Void)code, writer);
 		}
 		else if(code instanceof Code.BinArithOp) {
-			writeCode((Code.BinArithOp)code);
+			writeCode((Code.BinArithOp)code, writer);
 		}
 		else if(code instanceof Code.BinListOp) {
-			writeCode((Code.BinListOp)code);
+			writeCode((Code.BinListOp)code, writer);
 		}
 		else if(code instanceof Code.BinSetOp) {
-			writeCode((Code.BinSetOp)code);
+			writeCode((Code.BinSetOp)code, writer);
 		}
 		else if(code instanceof Code.BinStringOp) {
-			writeCode((Code.BinStringOp)code);
+			writeCode((Code.BinStringOp)code, writer);
 		}
 		else if(code instanceof Code.UnArithOp) {
-			writeCode((Code.UnArithOp)code);
+			writeCode((Code.UnArithOp)code, writer);
 		}
 		else {
 			throw new RuntimeException("Unknown bytecode encountered: "+code+" ("+code.getClass()+")");
 		}
 	}
 
-	protected void writeIndents() {
-		for(int i=0;i<indentationLevel;i++) {
-			writer.print('\t');
-		}
+	private void writeIndents(PrintWriter writer) {
+		Utils.writeIndents(writer, indentationLevel);
 	}
 	
-	private void writePrimitiveBinArithOp(Code.BinArithKind kind, Type.Leaf type, ExpressionWriter lhs, ExpressionWriter rhs) {
+	private void writePrimitiveBinArithOp(Code.BinArithKind kind, Type.Leaf type, ExpressionWriter lhs, ExpressionWriter rhs, PrintWriter writer) {
 		writer.print('(');
 		switch(kind) {
 			case ADD:
@@ -320,7 +322,7 @@ public class OpenCLOpWriter {
 		writer.print(')');
 	}
 	
-	private void writePrimitiveUnArithOp(UnArithKind kind, Leaf type, ExpressionWriter expressionWriter) {
+	private void writePrimitiveUnArithOp(UnArithKind kind, Leaf type, ExpressionWriter expressionWriter, PrintWriter writer) {
 		writer.print('(');
 		switch(kind) {
 			case NEG:
@@ -335,7 +337,7 @@ public class OpenCLOpWriter {
 		writer.print(')');
 	}
 	
-	private void writeComparitor(Comparator op, int leftOperand, int rightOperand) {
+	private void writeComparitor(Comparator op, int leftOperand, int rightOperand, PrintWriter writer) {
 		writer.print('(');
 		switch(op) {
 			case SUBSET:
@@ -345,34 +347,34 @@ public class OpenCLOpWriter {
 			case ELEMOF:
 				throw new NotImplementedException();
 			case EQ:
-				typeWriter.writeRHS(leftOperand);
+				typeWriter.writeRHS(leftOperand, writer);
 				writer.print(" == ");
-				typeWriter.writeRHS(rightOperand);
+				typeWriter.writeRHS(rightOperand, writer);
 				break;
 			case GT:
-				typeWriter.writeRHS(leftOperand);
+				typeWriter.writeRHS(leftOperand, writer);
 				writer.print(" > ");
-				typeWriter.writeRHS(rightOperand);
+				typeWriter.writeRHS(rightOperand, writer);
 				break;
 			case GTEQ:
-				typeWriter.writeRHS(leftOperand);
+				typeWriter.writeRHS(leftOperand, writer);
 				writer.print(" >= ");
-				typeWriter.writeRHS(rightOperand);
+				typeWriter.writeRHS(rightOperand, writer);
 				break;
 			case LT:
-				typeWriter.writeRHS(leftOperand);
+				typeWriter.writeRHS(leftOperand, writer);
 				writer.print(" < ");
-				typeWriter.writeRHS(rightOperand);
+				typeWriter.writeRHS(rightOperand, writer);
 				break;
 			case LTEQ:
-				typeWriter.writeRHS(leftOperand);
+				typeWriter.writeRHS(leftOperand, writer);
 				writer.print(" <= ");
-				typeWriter.writeRHS(rightOperand);
+				typeWriter.writeRHS(rightOperand, writer);
 				break;
 			case NEQ:
-				typeWriter.writeRHS(leftOperand);
+				typeWriter.writeRHS(leftOperand, writer);
 				writer.print(" != ");
-				typeWriter.writeRHS(rightOperand);
+				typeWriter.writeRHS(rightOperand, writer);
 				break;
 		}
 		writer.print(')');
@@ -383,21 +385,21 @@ public class OpenCLOpWriter {
 		scopeEndLabels.add(scopeEnd);
 	}
 	
-	private void checkEndScope(Code.Label code) {
+	private void checkEndScope(Code.Label code, PrintWriter writer) {
 		while(scopeEndLabels.contains(code.label)) {
 			indentationLevel--;
-			writeIndents();
+			writeIndents(writer);
 			writer.print('}');
-			writeLineEnd(code, false);
+			writeLineEnd(code, false, writer);
 			scopeEndLabels.remove(code.label);
 		}
 	}
 	
-	private void writeLineEnd(Code code) {
-		writeLineEnd(code, true);
+	private void writeLineEnd(Code code, PrintWriter writer) {
+		writeLineEnd(code, true, writer);
 	}
 	
-	private void writeLineEnd(Code code, boolean semicolon) {
+	private void writeLineEnd(Code code, boolean semicolon, PrintWriter writer) {
 		if(semicolon) {
 			writer.print(';');
 		}
@@ -411,80 +413,80 @@ public class OpenCLOpWriter {
 		}
 	}
 	
-	private void writeCode(final UnArithOp code) {
+	private void writeCode(final UnArithOp code, PrintWriter writer) {
 		if(!(code.type instanceof Type.Leaf)){
 			throw new RuntimeException("Dont know how to handle nonleaf types for UnArithOp: "+code.type);
 		}
 		
-		writeIndents();
-		typeWriter.writeLHS(code.target, code.type);
+		writeIndents(writer);
+		typeWriter.writeLHS(code.target, code.type, writer);
 		writer.print(" = ");
 		writePrimitiveUnArithOp(code.kind, (Type.Leaf)code.type, new ExpressionWriter() {
 			@Override
 			public void writeExpression(PrintWriter writer) {
-				typeWriter.writeRHS(code.operand);
+				typeWriter.writeRHS(code.operand, writer);
 			}
-		});
-		writeLineEnd(code);
+		}, writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.BinStringOp code) {
+	private void writeCode(Code.BinStringOp code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.BinSetOp code) {
+	private void writeCode(Code.BinSetOp code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.BinListOp code) {
+	private void writeCode(Code.BinListOp code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(final Code.BinArithOp code) {
+	private void writeCode(final Code.BinArithOp code, PrintWriter writer) {
 		if(!(code.type instanceof Type.Leaf)){
 			throw new RuntimeException("Dont know how to handle nonleaf types for BinArithOp: "+code.type);
 		}
 		
-		writeIndents();
-		typeWriter.writeLHS(code.target, code.type);
+		writeIndents(writer);
+		typeWriter.writeLHS(code.target, code.type, writer);
 		writer.print(" = ");
 		writePrimitiveBinArithOp(code.kind, (Type.Leaf)code.type, new ExpressionWriter() {
 			
 			@Override
 			public void writeExpression(PrintWriter writer) {
-				typeWriter.writeRHS(code.leftOperand);
+				typeWriter.writeRHS(code.leftOperand, writer);
 			}
 		}, new ExpressionWriter() {
 			
 			@Override
 			public void writeExpression(PrintWriter writer) {
-				typeWriter.writeRHS(code.rightOperand);
+				typeWriter.writeRHS(code.rightOperand, writer);
 			}
-		});
-		writeLineEnd(code);
+		}, writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.Void code) {
-		writeIndents();
-		writeLineEnd(code);
+	private void writeCode(Code.Void code, PrintWriter writer) {
+		writeIndents(writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.Update code) {
+	private void writeCode(Code.Update code, PrintWriter writer) {
 		// TODO: implement this properly
 		if(code.type instanceof Type.List) {
 			for(Code.LVal<Type.EffectiveList> _lv : code) {
 				final Code.ListLVal lv = (Code.ListLVal)_lv;
 				
-				writeIndents();
+				writeIndents(writer);
 				typeWriter.writeListAccessor(code.target, new ExpressionWriter() {
 					@Override
 					public void writeExpression(PrintWriter writer) {
-						typeWriter.writeRHS(lv.indexOperand);
+						typeWriter.writeRHS(lv.indexOperand, writer);
 					}
-				});
+				}, writer);
 				writer.print(" = ");
-				typeWriter.writeRHS(code.operand); // TODO: support more than one
-				writeLineEnd(code);
+				typeWriter.writeRHS(code.operand, writer); // TODO: support more than one
+				writeLineEnd(code, writer);
 			}
 		}
 		else {
@@ -492,114 +494,114 @@ public class OpenCLOpWriter {
 		}
 	}
 
-	private void writeCode(final Code.TupleLoad code) {
-		writeIndents();
-		typeWriter.writeLHS(code.target, code.type.element(code.index));
+	private void writeCode(final Code.TupleLoad code, PrintWriter writer) {
+		writeIndents(writer);
+		typeWriter.writeLHS(code.target, code.type.element(code.index), writer);
 		writer.print(" = ");
 		typeWriter.writeTupleAccessor(code.operand, new ExpressionWriter() {
 			@Override
 			public void writeExpression(PrintWriter writer) {
 				writer.print(code.index);
 			}
-		});
-		writeLineEnd(code);
+		}, writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.Throw code) {
+	private void writeCode(Code.Throw code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.Switch code) {
-		writeIndents();
+	private void writeCode(Code.Switch code, PrintWriter writer) {
+		writeIndents(writer);
 		for(Pair<Constant, String> caseStatement : code.branches) {
 			writer.print("if(");
 			writer.print(caseStatement.first());
 			writer.print(" == ");
-			typeWriter.writeRHS(code.operand);
+			typeWriter.writeRHS(code.operand, writer);
 			writer.print(") { goto ");
 			writer.print(caseStatement.second());
 			writer.print("; }");
-			writeLineEnd(code, false);
-			writeIndents();
+			writeLineEnd(code, false, writer);
+			writeIndents(writer);
 			writer.print("else ");
 		}
 		writer.print("{ goto ");
 		writer.print(code.defaultTarget);
 		writer.print("; }");
-		writeLineEnd(code, false);
+		writeLineEnd(code, false, writer);
 	}
 
-	private void writeCode(Code.SubString code) {
+	private void writeCode(Code.SubString code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.SubList code) {
+	private void writeCode(Code.SubList code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.Return code) {
-		writeIndents();
+	private void writeCode(Code.Return code, PrintWriter writer) {
+		writeIndents(writer);
 		writer.print("return ");
-		typeWriter.writeRHS(code.operand);
-		writeLineEnd(code);
+		typeWriter.writeRHS(code.operand, writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.Not code) {
-		writeIndents();
-		typeWriter.writeLHS(code.target, code.type);
+	private void writeCode(Code.Not code, PrintWriter writer) {
+		writeIndents(writer);
+		typeWriter.writeLHS(code.target, code.type, writer);
 		writer.print(" = !");
-		typeWriter.writeRHS(code.operand);
-		writeLineEnd(code);
+		typeWriter.writeRHS(code.operand, writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.NewTuple code) {
+	private void writeCode(Code.NewTuple code, PrintWriter writer) {
 		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
-	private void writeCode(Code.NewSet code) {
+	private void writeCode(Code.NewSet code, PrintWriter writer) {
 		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
-	private void writeCode(Code.NewRecord code) {
+	private void writeCode(Code.NewRecord code, PrintWriter writer) {
 		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
-	private void writeCode(Code.NewMap code) {
+	private void writeCode(Code.NewMap code, PrintWriter writer) {
 		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
-	private void writeCode(Code.NewObject code) {
+	private void writeCode(Code.NewObject code, PrintWriter writer) {
 		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
-	private void writeCode(Code.NewList code) {
+	private void writeCode(Code.NewList code, PrintWriter writer) {
 		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
 	}
 
-	private void writeCode(Code.Move code) {
-		writeIndents();
-		typeWriter.writeLHS(code.target, code.type);
+	private void writeCode(Code.Move code, PrintWriter writer) {
+		writeIndents(writer);
+		typeWriter.writeLHS(code.target, code.type, writer);
 		writer.print(" = ");
-		typeWriter.writeRHS(code.operand);
-		writeLineEnd(code);
+		typeWriter.writeRHS(code.operand, writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.LengthOf code) {
-		writeIndents();
-		typeWriter.writeLHS(code.target, code.type.element());
+	private void writeCode(Code.LengthOf code, PrintWriter writer) {
+		writeIndents(writer);
+		typeWriter.writeLHS(code.target, code.type.element(), writer);
 		writer.print(" = ");
-		typeWriter.writeListLength(code.operand);
-		writeLineEnd(code);
+		typeWriter.writeListLength(code.operand, writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.Lambda code) {
+	private void writeCode(Code.Lambda code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.Invoke code) {
-		writeIndents();
+	private void writeCode(Code.Invoke code, PrintWriter writer) {
+		writeIndents(writer);
 		if(code.type.ret() != Type.T_VOID) {
-			typeWriter.writeLHS(code.target, code.type.ret());
+			typeWriter.writeLHS(code.target, code.type.ret(), writer);
 			writer.print(" = ");
 		}
 		writer.print(functionTranslator.translateFunctionName(code));
@@ -608,130 +610,130 @@ public class OpenCLOpWriter {
 		for(int arg : code.operands) {
 			writer.print(sep);
 			sep = ", ";
-			typeWriter.writeRHS(arg);
+			typeWriter.writeRHS(arg, writer);
 		}
 		writer.print(')');
-		writeLineEnd(code);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.Invert code) {
-		writeIndents();
-		typeWriter.writeLHS(code.target, code.type);
+	private void writeCode(Code.Invert code, PrintWriter writer) {
+		writeIndents(writer);
+		typeWriter.writeLHS(code.target, code.type, writer);
 		writer.print(" = ~");
-		typeWriter.writeRHS(code.operand);
-		writeLineEnd(code);
+		typeWriter.writeRHS(code.operand, writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.IndirectInvoke code) {
+	private void writeCode(Code.IndirectInvoke code, PrintWriter writer) {
 		throw new NotSupportedByGPGPUException("Function pointers not supported");
 	}
 
-	private void writeCode(final Code.IndexOf code) {
-		writeIndents();
-		typeWriter.writeLHS(code.target, code.type.element());
+	private void writeCode(final Code.IndexOf code, PrintWriter writer) {
+		writeIndents(writer);
+		typeWriter.writeLHS(code.target, code.type.element(), writer);
 		writer.print(" = ");
 		typeWriter.writeListAccessor(code.leftOperand, new ExpressionWriter() {
 			@Override
 			public void writeExpression(PrintWriter writer) {
-				typeWriter.writeRHS(code.rightOperand);
+				typeWriter.writeRHS(code.rightOperand, writer);
 			}
-		});
-		writeLineEnd(code);
+		}, writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.IfIs code) {
+	private void writeCode(Code.IfIs code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.If code) {
-		writeIndents();
+	private void writeCode(Code.If code, PrintWriter writer) {
+		writeIndents(writer);
 		writer.print("if(");
-		writeComparitor(code.op, code.leftOperand, code.rightOperand);
+		writeComparitor(code.op, code.leftOperand, code.rightOperand, writer);
 		writer.print(") { goto ");
 		writer.print(code.target);
 		writer.print("; }");
-		writeLineEnd(code, false);
+		writeLineEnd(code, false, writer);
 	}
 
-	private void writeCode(Code.FieldLoad code) {
+	private void writeCode(Code.FieldLoad code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.Assume code) {
+	private void writeCode(Code.Assume code, PrintWriter writer) {
 		// TODO Auto-generated method stub
 		
-		writeIndents();
-		writeLineEnd(code, false);
+		writeIndents(writer);
+		writeLineEnd(code, false, writer);
 	}
 
-	private void writeCode(Code.Dereference code) {
+	private void writeCode(Code.Dereference code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.Debug code) {
+	private void writeCode(Code.Debug code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.Convert code) {
+	private void writeCode(Code.Convert code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.Assign code) {
-		writeIndents();
-		typeWriter.writeLHS(code.target, code.type);
+	private void writeCode(Code.Assign code, PrintWriter writer) {
+		writeIndents(writer);
+		typeWriter.writeLHS(code.target, code.type, writer);
 		writer.print(" = ");
-		typeWriter.writeRHS(code.operand);
-		writeLineEnd(code);
+		typeWriter.writeRHS(code.operand, writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.Assert code) {
+	private void writeCode(Code.Assert code, PrintWriter writer) {
 		// TODO Auto-generated method stub
 		
-		writeIndents();
-		writeLineEnd(code, false);
+		writeIndents(writer);
+		writeLineEnd(code, false, writer);
 	}
 
-	private void writeCode(Code.Label code) {
-		checkEndScope(code);
+	private void writeCode(Code.Label code, PrintWriter writer) {
+		checkEndScope(code, writer);
 		writer.print(code.label);
 		writer.print(':');
-		writeLineEnd(code); // Good to write a semicolon, means we always have a statement to jump to
+		writeLineEnd(code, writer); // Good to write a semicolon, means we always have a statement to jump to
 	}
 
-	private void writeCode(Code.Goto code) {
-		writeIndents();
+	private void writeCode(Code.Goto code, PrintWriter writer) {
+		writeIndents(writer);
 		writer.print("goto ");
 		writer.print(code.target);
-		writeLineEnd(code);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.Const code) {
-		writeIndents();
-		typeWriter.writeLHS(code.target, code.constant.type());
+	private void writeCode(Code.Const code, PrintWriter writer) {
+		writeIndents(writer);
+		typeWriter.writeLHS(code.target, code.constant.type(), writer);
 		writer.print(" = ");
 		writer.print(code.constant); // FIXME: should be looking at types
-		writeLineEnd(code);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.TryCatch code) {
+	private void writeCode(Code.TryCatch code, PrintWriter writer) {
 		throw new NotImplementedException();
 	}
 
-	private void writeCode(Code.Nop code) {
-		writeIndents();
-		writeLineEnd(code);
+	private void writeCode(Code.Nop code, PrintWriter writer) {
+		writeIndents(writer);
+		writeLineEnd(code, writer);
 	}
 
-	private void writeCode(Code.Loop code) {
-		writeIndents();
+	private void writeCode(Code.Loop code, PrintWriter writer) {
+		writeIndents(writer);
 		writer.print("while(1) {");
-		writeLineEnd(code, false);
+		writeLineEnd(code, false, writer);
 		beginScope(code.target);
 	}
 
-	private void writeCode(Code.ForAll code) {
+	private void writeCode(Code.ForAll code, PrintWriter writer) {
 		// Write loop
-		writeIndents();
+		writeIndents(writer);
 		forallIndexCount++;
 		final String indexVar = "forallIndex"+forallIndexCount;
 		writer.print("for(int ");
@@ -739,36 +741,32 @@ public class OpenCLOpWriter {
 		writer.print(" = 0; ");
 		writer.print(indexVar);
 		writer.print(" < ");
-		typeWriter.writeListLength(code.sourceOperand);
+		typeWriter.writeListLength(code.sourceOperand, writer);
 		writer.print("; ++");
 		writer.print(indexVar);
 		writer.print(") {");
 		beginScope(code.target);
-		writeLineEnd(code, false);
+		writeLineEnd(code, false, writer);
 		
 		// Write whiley index variable - i.e. use indexVar to access from source
-		writeIndents();
-		typeWriter.writeLHS(code.indexOperand, code.type.element());
+		writeIndents(writer);
+		typeWriter.writeLHS(code.indexOperand, code.type.element(), writer);
 		writer.print(" = ");
 		typeWriter.writeListAccessor(code.sourceOperand, new ExpressionWriter() {
 			@Override
 			public void writeExpression(PrintWriter writer) {
 				writer.print(indexVar);
 			}
-		});
-		writeLineEnd(code);
+		}, writer);
+		writeLineEnd(code, writer);
 	}
 	
-	public void writePreamble() {
-		typeWriter.writeOutstandingBoilerplate();
-	}
-	
-	public void writeFunctionDecleration(String attributes, Type.Leaf type, String name, List<Argument> arguments) {
+	public void writeFunctionDecleration(String attributes, Type.Leaf type, String name, List<Argument> arguments, PrintWriter writer) {
 		if(attributes != null) {
 			writer.print(attributes);
 			writer.print(' ');
 		}
-		typeWriter.writeReturnType(type);
+		typeWriter.writeReturnType(type, writer);
 		writer.print(' ');
 		writer.print(name);
 		writer.print('(');
@@ -778,7 +776,7 @@ public class OpenCLOpWriter {
 			writer.print(seperator);
 			seperator = ", ";
 			
-			typeWriter.writeArgDecl(arg);
+			typeWriter.writeArgDecl(arg, writer);
 		}
 		
 		writer.print(')');

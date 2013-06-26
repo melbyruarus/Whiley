@@ -176,7 +176,7 @@ public class Wyil2OpenClBuilder implements Builder {
 	}
 
 	protected static int kid = 0;
-	private void writeOpenCLKernel(List<Block.Entry> filteredEntries, List<Argument> kernelArguments, final HashSet<String> declaredMethods, final PrintWriter forwardDecpWriter, final HashSet<String> invokedFunctions, PrintWriter kernelpWriter) {
+	private void writeOpenCLKernel(List<Block.Entry> filteredEntries, List<Argument> kernelArguments, final HashSet<String> declaredMethods, final PrintWriter forwardDecpWriter, final HashSet<String> invokedFunctions, final PrintWriter kernelpWriter) {
 		final OpenCLOpWriter invokedFunctionDeclerationOpWriter[] = new OpenCLOpWriter[1];
 		final HashSet<String> writingMethods = new HashSet<String>();
 		
@@ -201,16 +201,15 @@ public class Wyil2OpenClBuilder implements Builder {
 						}
 						
 						// FIXME: no checks for return type type
-						invokedFunctionDeclerationOpWriter[0].writeFunctionDecleration(null, (Type.Leaf)code.type.ret(), name, functionArguments);
+						invokedFunctionDeclerationOpWriter[0].writeFunctionDecleration(null, (Type.Leaf)code.type.ret(), name, functionArguments, kernelpWriter);
 						forwardDecpWriter.println(';');
 						
 						StringWriter invokedFunctionWriter = new StringWriter();
 						PrintWriter invokedFunctionpWriter = new PrintWriter(invokedFunctionWriter);
-						OpenCLOpWriter invokedFunctionOpWriter = new OpenCLOpWriter(invokedFunctionpWriter, functionTranslator[0]);
+						OpenCLOpWriter invokedFunctionOpWriter = new OpenCLOpWriter(functionTranslator[0]);
 						
-						invokedFunctionOpWriter.writeFunctionDecleration(null, (Type.Leaf)code.type.ret(), name, functionArguments);
+						invokedFunctionOpWriter.writeFunctionDecleration(null, (Type.Leaf)code.type.ret(), name, functionArguments, kernelpWriter);
 						invokedFunctionpWriter.print(" {\n");
-						invokedFunctionOpWriter.writePreamble();
 						
 						WyilFile module = wyilFiles.get(code.name.module());
 						if(module == null) {
@@ -234,7 +233,7 @@ public class Wyil2OpenClBuilder implements Builder {
 							entries.add(e);
 						}
 						
-						invokedFunctionOpWriter.writeBlock(entries);
+						invokedFunctionOpWriter.writeBlock(entries, forwardDecpWriter);
 						invokedFunctionpWriter.println("}");
 						
 						invokedFunctions.add(invokedFunctionWriter.toString());
@@ -251,14 +250,13 @@ public class Wyil2OpenClBuilder implements Builder {
 			}
 		};
 		
-		invokedFunctionDeclerationOpWriter[0] = new OpenCLOpWriter(forwardDecpWriter, functionTranslator[0]);
-		OpenCLOpWriter kernelOpWriter = new OpenCLOpWriter(kernelpWriter, functionTranslator[0]);
+		invokedFunctionDeclerationOpWriter[0] = new OpenCLOpWriter(functionTranslator[0]);
+		OpenCLOpWriter kernelOpWriter = new OpenCLOpWriter(functionTranslator[0]);
 		
-		kernelOpWriter.writeFunctionDecleration("__kernel", Type.T_VOID, "whiley_gpgpu_func_"+kid, kernelArguments);
+		kernelOpWriter.writeFunctionDecleration("__kernel", Type.T_VOID, "whiley_gpgpu_func_"+kid, kernelArguments, kernelpWriter);
 		
 		kernelpWriter.print(" {\n");
-		kernelOpWriter.writePreamble();
-		kernelOpWriter.writeBlock(filteredEntries);
+		kernelOpWriter.writeBlock(filteredEntries, kernelpWriter);
 		kernelpWriter.println("}");
 	}
 }
