@@ -83,7 +83,10 @@ public class ModifiedRegisterAnalysis {
 
 	@SuppressWarnings("unchecked")
 	public static Type typeof(Code.AbstractAssignable assignable) {
-		if(assignable instanceof Code.AbstractUnaryAssignable) {
+		if(assignable instanceof Code.Invoke){
+			return ((Code.Invoke) assignable).type.ret();
+		}
+		else if(assignable instanceof Code.AbstractUnaryAssignable) {
 			return ((Code.AbstractUnaryAssignable<Type>) assignable).type;
 		}
 		else if(assignable instanceof Code.AbstractBinaryAssignable) {
