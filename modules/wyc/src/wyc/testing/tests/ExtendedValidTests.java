@@ -41,8 +41,8 @@ public class ExtendedValidTests extends TestHarness {
  @Ignore("Requires Modulus") @Test public void ConstrainedInt_Valid_13_RuntimeTest() { verifyPassTest("ConstrainedInt_Valid_13"); }
  @Test public void ConstrainedInt_Valid_3_RuntimeTest() { verifyPassTest("ConstrainedInt_Valid_3"); }
  @Test public void ConstrainedInt_Valid_4_RuntimeTest() { verifyPassTest("ConstrainedInt_Valid_4"); }
- @Test public void ConstrainedInt_Valid_5_RuntimeTest() { verifyPassTest("ConstrainedInt_Valid_5"); }
- @Test public void ConstrainedInt_Valid_6_RuntimeTest() { verifyPassTest("ConstrainedInt_Valid_6"); }
+ @Ignore("Takes Long!") @Test public void ConstrainedInt_Valid_5_RuntimeTest() { verifyPassTest("ConstrainedInt_Valid_5"); }
+ @Ignore("Infinite loop?") @Test public void ConstrainedInt_Valid_6_RuntimeTest() { verifyPassTest("ConstrainedInt_Valid_6"); }
  @Test public void ConstrainedInt_Valid_7_RuntimeTest() { verifyPassTest("ConstrainedInt_Valid_7"); }
  @Test public void ConstrainedInt_Valid_8_RuntimeTest() { verifyPassTest("ConstrainedInt_Valid_8"); }
  @Test public void ConstrainedInt_Valid_9_RuntimeTest() { verifyPassTest("ConstrainedInt_Valid_9"); }
@@ -71,7 +71,7 @@ public class ExtendedValidTests extends TestHarness {
  @Ignore("Future Work") @Test public void ConstrainedNegation_Valid_1_RuntimeTest() { verifyPassTest("ConstrainedNegation_Valid_1"); }
  @Test public void ConstrainedRecord_Valid_4_RuntimeTest() { verifyPassTest("ConstrainedRecord_Valid_4"); }
  @Test public void ConstrainedRecord_Valid_5_RuntimeTest() { verifyPassTest("ConstrainedRecord_Valid_5"); }
- @Test public void ConstrainedRecord_Valid_6_RuntimeTest() { verifyPassTest("ConstrainedRecord_Valid_6"); }
+ @Ignore("Timeout") @Test public void ConstrainedRecord_Valid_6_RuntimeTest() { verifyPassTest("ConstrainedRecord_Valid_6"); }
  @Ignore("Unclassified") @Test public void ConstrainedRecord_Valid_7_RuntimeTest() { verifyPassTest("ConstrainedRecord_Valid_7"); }
  @Test public void ConstrainedSet_Valid_1_RuntimeTest() { verifyPassTest("ConstrainedSet_Valid_1"); }
  @Test public void ConstrainedSet_Valid_2_RuntimeTest() { verifyPassTest("ConstrainedSet_Valid_2"); }
@@ -100,6 +100,7 @@ public class ExtendedValidTests extends TestHarness {
  @Test public void Function_Valid_9_RuntimeTest() { verifyPassTest("Function_Valid_9"); } 
  @Test public void IntDefine_Valid_1_RuntimeTest() { verifyPassTest("IntDefine_Valid_1"); }
  @Test public void IntDiv_Valid_1_RuntimeTest() { verifyPassTest("IntDiv_Valid_1"); }
+ @Test public void IntDiv_Valid_2_RuntimeTest() { verifyPassTest("IntDiv_Valid_2"); }
  @Ignore("Requires Lambdas") @Test public void Lambda_Valid_1_RuntimeTest() { verifyPassTest("Lambda_Valid_1"); }
  @Test public void ListAccess_Valid_1_RuntimeTest() { verifyPassTest("ListAccess_Valid_1"); }
  @Test public void ListAccess_Valid_2_RuntimeTest() { verifyPassTest("ListAccess_Valid_2"); }

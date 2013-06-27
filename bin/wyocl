@@ -19,6 +19,7 @@
 #
 # Copyright 2010, David James Pearce. 
 # modified 2012,	Art Protin <protin2art@gmail.com>
+# modified 2013,	Melby Ruarus <melby@ecs.vuw.ac.nz>
 
 ##################
 # CONFIGURATION
@@ -26,7 +27,7 @@
 
 DIR=`dirname "$0"`/..
 LIBDIR=$DIR/lib
-LIBS="wyocl wyjc wyc wyil wycs wybs wyone"
+LIBS="wyocl wyjc wyc wyil wycs wybs wyrl"
 
 . $DIR/bin/wy_common.bash
 

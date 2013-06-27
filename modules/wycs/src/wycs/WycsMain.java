@@ -66,16 +66,18 @@ public class WycsMain {
 			new OptArg("version", "Print version information"),
 			new OptArg("verbose",
 					"Print detailed information on what the compiler is doing"),
-			new OptArg("debug",
-					"Print detailed debugging information"),
+			new OptArg("debug", "Print detailed debugging information"),
+			new OptArg("decompile", "d", "Decompile a give wycs binary file"),
 			new OptArg("wycspath", "wp", OptArg.FILELIST,
 					"Specify where to find wycs (binary) files",
 					new ArrayList<String>()),
 			new OptArg("bootpath", "bp", OptArg.FILELIST,
 					"Specify where to find wycs standard library files",
 					new ArrayList<String>()),
-			new OptArg("wycsdir", "wd", OptArg.FILEDIR,
-					"Specify where to find wycs source files", new File(".")),
+			new OptArg("wyaldir", "wd", OptArg.FILEDIR,
+					"Specify where to find wyal source files", new File(".")),
+			new OptArg("wycsdir", OptArg.FILEDIR,
+					"Specify where to find wycs binaryfiles", new File(".")),
 			new OptArg("X", OptArg.PIPELINECONFIGURE,
 					"Configure existing pipeline stage"),
 			new OptArg("A", OptArg.PIPELINEAPPEND, "append new pipeline stage"),
@@ -156,7 +158,7 @@ public class WycsMain {
 
 			ArrayList<String> args = new ArrayList<String>(Arrays.asList(_args));
 			Map<String, Object> values = OptArg.parseOptions(args, options);
-
+		
 			// Second, check if we're printing version
 			if (values.containsKey("version")) {
 				System.out.println("Whiley Constraint Solver (wycs) version "
@@ -211,12 +213,16 @@ public class WycsMain {
 			verbose = values.containsKey("verbose");
 			builder.setVerbose(verbose);
 			builder.setDebug(values.containsKey("debug"));
-
+			builder.setDecompile(values.containsKey("decompile"));
+			
 			ArrayList<Pipeline.Modifier> pipelineModifiers = (ArrayList) values
 					.get("pipeline");
 			if (pipelineModifiers != null) {
 				builder.setPipelineModifiers(pipelineModifiers);
 			}
+
+			File wyalDir = (File) values.get("wyaldir");
+			builder.setWyalDir(wyalDir);
 
 			File wycsDir = (File) values.get("wycsdir");
 			builder.setWycsDir(wycsDir);
@@ -232,6 +238,13 @@ public class WycsMain {
 				delta.add(new File(arg));
 			}
 
+			// sanity check we've actually compiling things that exist
+			for(File f : delta) {
+				if(!f.exists()) {
+					System.out.println("wycs: file not found: " + f.getName());
+					return INTERNAL_FAILURE;
+				}
+			}
 			// =====================================================================
 			// Run Build Task
 			// =====================================================================

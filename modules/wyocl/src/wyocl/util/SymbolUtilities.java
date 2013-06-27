@@ -2,9 +2,9 @@ package wyocl.util;
 
 import java.io.IOException;
 
-import wyautl.io.BinaryOutputStream;
+import wybs.io.BinaryOutputStream;
 import wyil.lang.Type;
-import wyone.io.JavaIdentifierOutputStream;
+import wyrl.io.JavaIdentifierOutputStream;
 
 public class SymbolUtilities {
 	public static String nameMangle(String name, Type.FunctionOrMethod ft) {				

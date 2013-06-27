@@ -1,9 +1,0 @@
-import wycs.core.*
-
-assert:
-  forall ({int,int} xs):
-    if:
-      |xs| > 0
-    then:
-      exists((int,int) p): 
-        p in Append<int>(xs,xs)

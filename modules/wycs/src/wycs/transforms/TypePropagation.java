@@ -9,17 +9,21 @@ import wybs.lang.SyntacticElement;
 import wybs.lang.Transform;
 import wybs.util.Pair;
 import wybs.util.ResolveError;
-import wycs.lang.*;
-import wycs.WycsBuilder;
+import wybs.util.Triple;
+import wycs.builders.Wyal2WycsBuilder;
+import wycs.core.SemanticType;
+import wycs.core.Value;
+import wycs.core.WycsFile;
+import wycs.syntax.*;
 
-public class TypePropagation implements Transform<WycsFile> {
+public class TypePropagation implements Transform<WyalFile> {
 	
 	/**
 	 * Determines whether type propagation is enabled or not.
 	 */
 	private boolean enabled = getEnable();
 
-	private final WycsBuilder builder;
+	private final Wyal2WycsBuilder builder;
 	
 	private String filename;
 
@@ -28,7 +32,7 @@ public class TypePropagation implements Transform<WycsFile> {
 	// ======================================================================
 
 	public TypePropagation(Builder builder) {
-		this.builder = (WycsBuilder) builder;
+		this.builder = (Wyal2WycsBuilder) builder;
 	}
 	
 	// ======================================================================
@@ -51,24 +55,24 @@ public class TypePropagation implements Transform<WycsFile> {
 	// Apply method
 	// ======================================================================
 		
-	public void apply(WycsFile wf) {
+	public void apply(WyalFile wf) {
 		if(enabled) {
 			this.filename = wf.filename();
 
-			for (WycsFile.Declaration s : wf.declarations()) {
+			for (WyalFile.Declaration s : wf.declarations()) {
 				propagate(s);
 			}
 		}
 	}
 
-	private void propagate(WycsFile.Declaration s) {		
-		if(s instanceof WycsFile.Function) {
-			propagate((WycsFile.Function)s);
-		} else if(s instanceof WycsFile.Define) {
-			propagate((WycsFile.Define)s);
-		} else if(s instanceof WycsFile.Assert) {
-			propagate((WycsFile.Assert)s);
-		} else if(s instanceof WycsFile.Import) {
+	private void propagate(WyalFile.Declaration s) {		
+		if(s instanceof WyalFile.Function) {
+			propagate((WyalFile.Function)s);
+		} else if(s instanceof WyalFile.Define) {
+			propagate((WyalFile.Define)s);
+		} else if(s instanceof WyalFile.Assert) {
+			propagate((WyalFile.Assert)s);
+		} else if(s instanceof WyalFile.Import) {
 			
 		} else {
 			internalFailure("unknown statement encountered (" + s + ")",
@@ -76,54 +80,68 @@ public class TypePropagation implements Transform<WycsFile> {
 		}
 	}
 	
-	private void propagate(WycsFile.Function s) {
+	private void propagate(WyalFile.Function s) {
 		if(s.constraint != null) {
 			HashSet<String> generics = new HashSet<String>(s.generics);
 			HashMap<String,SemanticType> environment = new HashMap<String,SemanticType>();
-			addNamedVariables(s.from, environment,generics);
-			addNamedVariables(s.to, environment,generics);
+			addNamedVariables(s.from, environment,generics,s);
+			addNamedVariables(s.to, environment,generics,s);
 			SemanticType r = propagate(s.constraint,environment,generics,s);
 			checkIsSubtype(SemanticType.Bool,r,s.constraint);		
 		}
 	}
 	
-	private void propagate(WycsFile.Define s) {
+	private void propagate(WyalFile.Define s) {
 		HashSet<String> generics = new HashSet<String>(s.generics);
 		HashMap<String,SemanticType> environment = new HashMap<String,SemanticType>();		
-		addNamedVariables(s.from, environment,generics);
+		addNamedVariables(s.from, environment,generics,s);
 		SemanticType r = propagate(s.condition,environment,generics,s);
 		checkIsSubtype(SemanticType.Bool,r,s.condition);		
 	}
 		
-	private void addNamedVariables(TypePattern type,
-			HashMap<String, SemanticType> environment, HashSet<String> generics) {
+	private void addNamedVariables(TypePattern pattern,
+			HashMap<String, SemanticType> environment,
+			HashSet<String> generics, WyalFile.Context context) {
 
-		if (type.var != null) {
-			if (environment.containsKey(type.var)) {
+		SemanticType type = builder.convert(pattern.toSyntacticType(), generics, context);
+		
+		if (pattern.var != null) {
+			if (environment.containsKey(pattern.var)) {
 				internalFailure("duplicate variable name encountered",
-						filename, type);
+						filename, pattern);
 			}
-			environment
-					.put(type.var, convert(type.toSyntacticType(), generics));
+			environment.put(pattern.var, type);
 		}
 
-		if (type instanceof TypePattern.Tuple) {
-			TypePattern.Tuple st = (TypePattern.Tuple) type;
+		if (pattern instanceof TypePattern.Tuple) {
+			TypePattern.Tuple st = (TypePattern.Tuple) pattern;
 			for (TypePattern t : st.patterns) {
-				addNamedVariables(t, environment, generics);
+				addNamedVariables(t, environment, generics, context);
 			}
 		}
+		
+		pattern.attributes().add(new TypeAttribute(type));
 	}
 	
-	private void propagate(WycsFile.Assert s) {
+	private void propagate(WyalFile.Assert s) {
 		HashMap<String,SemanticType> environment = new HashMap<String,SemanticType>();
 		SemanticType t = propagate(s.expr, environment, new HashSet<String>(), s);
 		checkIsSubtype(SemanticType.Bool,t, s.expr);
 	}
 	
+	/**
+	 * Perform type propagation through a given expression, returning the type
+	 * of value that is returned by evaluating this expression.
+	 * 
+	 * @param e
+	 * @param environment
+	 * @param generics
+	 * @param context
+	 * @return
+	 */
 	private SemanticType propagate(Expr e,
 			HashMap<String, SemanticType> environment,
-			HashSet<String> generics, WycsFile.Context context) {
+			HashSet<String> generics, WyalFile.Context context) {
 		SemanticType t;
 		if(e instanceof Expr.Variable) {
 			t = propagate((Expr.Variable)e, environment, generics, context);
@@ -133,26 +151,28 @@ public class TypePropagation implements Transform<WycsFile> {
 			t = propagate((Expr.Unary)e, environment, generics, context);
 		} else if(e instanceof Expr.Binary) {
 			t = propagate((Expr.Binary)e, environment, generics, context);
+		} else if(e instanceof Expr.Ternary) {
+			t = propagate((Expr.Ternary)e, environment, generics, context);
 		} else if(e instanceof Expr.Nary) {
 			t = propagate((Expr.Nary)e, environment, generics, context);
 		} else if(e instanceof Expr.Quantifier) {
 			t = propagate((Expr.Quantifier)e, environment, generics, context);
 		} else if(e instanceof Expr.FunCall) {
 			t = propagate((Expr.FunCall)e, environment, generics, context);
-		} else if(e instanceof Expr.TupleLoad) {
-			t = propagate((Expr.TupleLoad)e, environment, generics, context);
+		} else if(e instanceof Expr.IndexOf) {
+			t = propagate((Expr.IndexOf)e, environment, generics, context);
 		} else {
 			internalFailure("unknown expression encountered (" + e + ")",
 					filename, e);
 			return null;
 		}
 		e.attributes().add(new TypeAttribute(t));
-		return t;
+		return returnType(e);
 	}
 	
 	private SemanticType propagate(Expr.Variable e,
 			HashMap<String, SemanticType> environment,
-			HashSet<String> generics, WycsFile.Context context) {
+			HashSet<String> generics, WyalFile.Context context) {
 		SemanticType t = environment.get(e.name);
 		if(t == null) {
 			internalFailure("undeclared variable encountered (" + e + ")",
@@ -163,51 +183,57 @@ public class TypePropagation implements Transform<WycsFile> {
 	
 	private SemanticType propagate(Expr.Constant e,
 			HashMap<String, SemanticType> environment,
-			HashSet<String> generics, WycsFile.Context context) {
+			HashSet<String> generics, WyalFile.Context context) {
 		return e.value.type();
 	}
 
 	private SemanticType propagate(Expr.Unary e,
 			HashMap<String, SemanticType> environment,
-			HashSet<String> generics, WycsFile.Context context) {
+			HashSet<String> generics, WyalFile.Context context) {
 		SemanticType op_type = propagate(e.operand,environment,generics,context);
 		
 		switch(e.op) {
 		case NOT:
 			checkIsSubtype(SemanticType.Bool,op_type,e);
-			return op_type;
+			break;
 		case NEG:
 			checkIsSubtype(SemanticType.IntOrReal,op_type,e);
-			return op_type;
+			break;
 		case LENGTHOF:
-			checkIsSubtype(SemanticType.SetAny,op_type,e);
-			return SemanticType.Int;		
+			checkIsSubtype(SemanticType.SetAny,op_type,e);			
 		}
-		
-		internalFailure("unknown unary expression encountered (" + e + ")",
-				filename, e);
-		return null; // deadcode
+		return op_type;
 	}
 	
-	private SemanticType propagate(Expr.TupleLoad e,
+	private SemanticType propagate(Expr.IndexOf e,
 			HashMap<String, SemanticType> environment,
-			HashSet<String> generics, WycsFile.Context context) {
-		SemanticType op_type = propagate(e.operand,environment,generics,context);
-		if(!(op_type instanceof SemanticType.Tuple)) {			
-			syntaxError("expecting tuple type, got: " + op_type,filename,e.operand);
+			HashSet<String> generics, WyalFile.Context context) {
+		SemanticType src_type = propagate(e.operand, environment, generics,
+				context);
+		SemanticType index_type = propagate(e.index, environment, generics,
+				context);
+		if(src_type instanceof SemanticType.EffectiveTuple) {
+			SemanticType.EffectiveTuple tt = (SemanticType.EffectiveTuple) src_type;
+			checkIsSubtype(SemanticType.Int, index_type, e.operand);
+			if (!(e.index instanceof Expr.Constant)) {
+				syntaxError("constant index required for tuple load", filename,
+						e.index);
+			}  			
+		} else {
+			checkIsSubtype(SemanticType.SetTupleAnyAny, src_type, e.operand);
+			// FIXME: handle case for effective set (i.e. union of sets)  
+			SemanticType.Set st = (SemanticType.Set) src_type;
+			SemanticType.EffectiveTuple tt = (SemanticType.EffectiveTuple) st.element();
+			// FIXME: handle case for effective tuple of wrong size
+			checkIsSubtype(tt.tupleElement(0), index_type, e.index);
 		}
-		SemanticType.Tuple tt = (SemanticType.Tuple) op_type;
-		if(e.index < 0) {
-			syntaxError("negative tuple access",filename,e.operand);
-		} else if(tt.elements().length <= e.index) {
-			syntaxError("tuple access out of bounds",filename,e.operand);
-		} 
-		return tt.element(e.index);
+		
+		return src_type;
 	}
 	
 	private SemanticType propagate(Expr.Binary e,
 			HashMap<String, SemanticType> environment,
-			HashSet<String> generics, WycsFile.Context context) {
+			HashSet<String> generics, WyalFile.Context context) {
 		SemanticType lhs_type = propagate(e.leftOperand,environment,generics,context);
 		SemanticType rhs_type = propagate(e.rightOperand,environment,generics,context);
 		
@@ -222,7 +248,7 @@ public class TypePropagation implements Transform<WycsFile> {
 			return SemanticType.Or(lhs_type,rhs_type);
 		case EQ:
 		case NEQ:
-			return SemanticType.Bool;
+			return SemanticType.Or(lhs_type,rhs_type);
 		case IMPLIES:
 		case IFF:
 			checkIsSubtype(SemanticType.Bool,lhs_type,e.leftOperand);
@@ -234,20 +260,54 @@ public class TypePropagation implements Transform<WycsFile> {
 		case GTEQ:
 			checkIsSubtype(SemanticType.IntOrReal,lhs_type,e.leftOperand);
 			checkIsSubtype(SemanticType.IntOrReal,rhs_type,e.rightOperand);
-			return SemanticType.Bool;
+			return SemanticType.Or(lhs_type,rhs_type);
 		case IN: {
 			checkIsSubtype(SemanticType.SetAny,rhs_type,e.rightOperand);
 			SemanticType.Set s = (SemanticType.Set) rhs_type;
-			checkIsSubtype(s.element(),lhs_type,e.leftOperand);
-			return SemanticType.Bool;
+			return s;
 		}
 		case SUBSET:
 		case SUBSETEQ:
 		case SUPSET:
-		case SUPSETEQ:
+		case SUPSETEQ: {
 			checkIsSubtype(SemanticType.SetAny,lhs_type,e.leftOperand);
 			checkIsSubtype(SemanticType.SetAny,rhs_type,e.rightOperand);
-			return SemanticType.Bool;				
+			checkIsSubtype(lhs_type,rhs_type,e);
+			return SemanticType.Or(lhs_type,rhs_type);	
+		}
+		case SETUNION: {
+			checkIsSubtype(SemanticType.SetAny,lhs_type,e.leftOperand);
+			checkIsSubtype(SemanticType.SetAny,rhs_type,e.rightOperand);
+			SemanticType.Set l = (SemanticType.Set) lhs_type;
+			SemanticType.Set r = (SemanticType.Set) rhs_type;
+			return SemanticType.Set(l.flag() || r.flag(),SemanticType.Or(l.element(),r.element()));
+		}
+		case SETINTERSECTION: {
+			checkIsSubtype(SemanticType.SetAny,lhs_type,e.leftOperand);
+			checkIsSubtype(SemanticType.SetAny,rhs_type,e.rightOperand);
+			// TODO: the following gives a more accurate type, but there are
+			// some outstanding issues related to the type system reduction
+			// rules.
+			//return SemanticType.And(lhs_type,rhs_type);
+			SemanticType.Set l = (SemanticType.Set) lhs_type;
+			SemanticType.Set r = (SemanticType.Set) rhs_type;
+			return SemanticType.Set(l.flag()&&r.flag(),SemanticType.Or(l.element(),r.element()));
+		}
+		case LISTAPPEND: {
+			checkIsSubtype(SemanticType.SetTupleAnyAny, lhs_type, e.leftOperand);
+			checkIsSubtype(SemanticType.SetTupleAnyAny, rhs_type,
+					e.rightOperand);
+			SemanticType.Set l = (SemanticType.Set) lhs_type;
+			SemanticType.Set r = (SemanticType.Set) rhs_type;
+			return SemanticType.Set(l.flag() && r.flag(),
+					SemanticType.Or(l.element(), r.element()));
+		}
+		case RANGE: {
+			checkIsSubtype(SemanticType.Int, lhs_type, e.leftOperand);
+			checkIsSubtype(SemanticType.Int, rhs_type, e.rightOperand);
+			return SemanticType.Set(true,
+					SemanticType.Tuple(SemanticType.Int, SemanticType.Int));
+		}
 		}
 		
 		internalFailure("unknown binary expression encountered (" + e + ")",
@@ -255,9 +315,35 @@ public class TypePropagation implements Transform<WycsFile> {
 		return null; // deadcode
 	}
 	
+	private SemanticType propagate(Expr.Ternary e,
+			HashMap<String, SemanticType> environment,
+			HashSet<String> generics, WyalFile.Context context) {
+		SemanticType firstType = propagate(e.firstOperand,environment,generics,context);
+		SemanticType secondType = propagate(e.secondOperand,environment,generics,context);
+		SemanticType thirdType = propagate(e.thirdOperand,environment,generics,context);
+		switch(e.op) {
+		case UPDATE:
+			checkIsSubtype(SemanticType.SetTupleAnyAny,firstType,e.firstOperand);
+			// FIXME: should this handle map updates?
+			checkIsSubtype(SemanticType.Int, secondType, e.secondOperand);
+			SemanticType.Set l = (SemanticType.Set) firstType;
+			SemanticType.Tuple elementType = SemanticType.Tuple(SemanticType.Int,thirdType);
+			checkIsSubtype(l.element(),elementType,e.thirdOperand);
+			return firstType;
+		case SUBLIST:
+			checkIsSubtype(SemanticType.SetTupleAnyAny,firstType,e.firstOperand);
+			checkIsSubtype(SemanticType.Int, secondType, e.secondOperand);
+			checkIsSubtype(SemanticType.Int, thirdType, e.thirdOperand);
+			return firstType;
+		}
+		internalFailure("unknown ternary expression encountered (" + e + ")",
+				filename, e);
+		return null; // deadcode
+	}
+	
 	private SemanticType propagate(Expr.Nary e,
 			HashMap<String, SemanticType> environment,
-			HashSet<String> generics, WycsFile.Context context) {
+			HashSet<String> generics, WyalFile.Context context) {
 		Expr[] e_operands = e.operands;
 		SemanticType[] op_types = new SemanticType[e_operands.length];
 		
@@ -271,11 +357,16 @@ public class TypePropagation implements Transform<WycsFile> {
 			for(int i=0;i!=e_operands.length;++i) {
 				checkIsSubtype(SemanticType.Bool,op_types[i],e_operands[i]);
 			}
-			return SemanticType.Bool;
-		case SET:
-			return SemanticType.Set(SemanticType.Or(op_types));
+			return SemanticType.Bool;		
 		case TUPLE:
 			return SemanticType.Tuple(op_types);
+		case SET:			
+			return SemanticType.Set(op_types.length == 0,SemanticType.Or(op_types));
+		case LIST:
+			return SemanticType.Set(
+					op_types.length == 0,
+					SemanticType.Tuple(SemanticType.Int,
+							SemanticType.Or(op_types)));			
 		}
 		
 		internalFailure("unknown nary expression encountered (" + e + ")",
@@ -285,65 +376,67 @@ public class TypePropagation implements Transform<WycsFile> {
 	
 	private SemanticType propagate(Expr.Quantifier e,
 			HashMap<String, SemanticType> environment,
-			HashSet<String> generics, WycsFile.Context context) {
+			HashSet<String> generics, WyalFile.Context context) {
 		environment = new HashMap<String,SemanticType>(environment);
-		Pair<TypePattern,Expr>[] e_variables = e.variables;
 		
-		for (int i = 0; i != e_variables.length; ++i) {
-			Pair<TypePattern,Expr> p = e_variables[i];
-			TypePattern pattern = p.first();
-			SemanticType src_t = convert(pattern.toSyntacticType(),generics);
-			Expr src = p.second();
-			if(src != null) {
-				SemanticType t = propagate(p.second(),environment,generics,context);
-				checkIsSubtype(SemanticType.Set(src_t),t,p.second());
-				SemanticType.Set st = (SemanticType.Set) t;				
-			} 
-			addNamedVariables(p.first(), environment, generics);
-		}
-		
+		propagate(e.pattern,environment,generics,context);		
 		SemanticType r = propagate(e.operand,environment,generics,context);
 		checkIsSubtype(SemanticType.Bool,r,e.operand);
 		
 		return SemanticType.Bool;
 	}
 	
-	private SemanticType propagate(Expr.FunCall e,
+	private void  propagate(TypePattern pattern,
 			HashMap<String, SemanticType> environment,
-			HashSet<String> generics, WycsFile.Context context) {
+			HashSet<String> generics, WyalFile.Context context) {
+		SemanticType type = builder.convert(pattern.toSyntacticType(),generics,context);
 		
-		ArrayList<String> fn_generics;
-		SemanticType parameter;
-		SemanticType ret;
-		
-		try {			
-			Pair<NameID,WycsFile.Function> p = builder.resolveAs(e.name,WycsFile.Function.class,context);
-			WycsFile.Function fn = p.second();
-			fn_generics = fn.generics;
-			SemanticType.Tuple funType = getFunctionType(fn);
-			parameter = funType.element(0);
-			ret = funType.element(1);
-		} catch(ResolveError re) {
-			// This indicates we couldn't find a function with the corresponding
-			// name. But, we don't want to give up just yet. It could be a macro
-			// definition!
-			try { 
-				Pair<NameID,WycsFile.Define> p = builder.resolveAs(e.name,WycsFile.Define.class,context);
-				WycsFile.Define dn = p.second();
-				fn_generics = dn.generics;
-				parameter = getDefinitionType(dn);
-				ret = SemanticType.Bool;
-			} catch(ResolveError err2) {
-				syntaxError("cannot resolve as function or definition", context.file().filename(), e);
-				return null;
+		if(pattern instanceof TypePattern.Tuple) {
+			TypePattern.Tuple tt = (TypePattern.Tuple) pattern;
+			for(TypePattern p : tt.patterns) {
+				propagate(p,environment,generics,context);
 			}
 		}
-		if (fn_generics.size() != e.generics.length) {
+		if(pattern.var != null) {
+			environment.put(pattern.var,type);
+		}
+		if(pattern.source != null) {
+			SemanticType ct = propagate(pattern.source,environment,generics,context);
+			checkIsSubtype(SemanticType.SetAny,ct,pattern);
+			// TODO: need effective set here
+			SemanticType.Set set_t = (SemanticType.Set) ct;
+			checkIsSubtype(type,set_t.element(),pattern);
+		}
+		if(pattern.constraint != null) {
+			SemanticType ct = propagate(pattern.constraint,environment,generics,context);
+			checkIsSubtype(SemanticType.Bool,ct,pattern);
+		}		
+		
+		pattern.attributes().add(new TypeAttribute(type));
+	}
+	
+	private SemanticType propagate(Expr.FunCall e,
+			HashMap<String, SemanticType> environment,
+			HashSet<String> generics, WyalFile.Context context) {
+				
+		SemanticType.Function fnType;		
+		
+		try {			
+			Pair<NameID,SemanticType.Function> p = builder.resolveAsFunctionType(e.name,context);			
+			fnType = p.second();
+		} catch(ResolveError re) {
+			syntaxError("cannot resolve as function or definition call", context.file().filename(), e, re);
+			return null;
+		}
+		
+		SemanticType[] fn_generics = fnType.generics();
+		
+		if (fn_generics.length != e.generics.length) {
 			// could resolve this with inference in the future.
 			syntaxError(
 					"incorrect number of generic arguments provided (got "
 							+ e.generics.length + ", required "
-							+ fn_generics.size() + ")", context.file()
+							+ fn_generics.length + ")", context.file()
 							.filename(), e);
 		}
 			
@@ -352,107 +445,101 @@ public class TypePropagation implements Transform<WycsFile> {
 		HashMap<String, SemanticType> binding = new HashMap<String, SemanticType>();
 
 		for (int i = 0; i != e.generics.length; ++i) {
-			binding.put(fn_generics.get(i), convert(e.generics[i], generics));
+			SemanticType.Var gv = (SemanticType.Var) fn_generics[i];
+			binding.put(gv.name(),
+					builder.convert(e.generics[i], generics, context));
 		}
 
-		parameter = parameter.substitute(binding);
-		ret = ret.substitute(binding);
-		checkIsSubtype(parameter, argument, e.operand);
-		return ret;	
+		fnType = (SemanticType.Function) fnType.substitute(binding);		
+		checkIsSubtype(fnType.from(), argument, e.operand);
+		return fnType;	
 	}
-	
-	private SemanticType.Tuple getFunctionType(WycsFile.Function fn) {
-		TypeAttribute typeAttr = fn.attribute(TypeAttribute.class);
-		if(typeAttr == null) {
-			// No type attribute on the given function declaration. Therefore,
-			// create one and it to the declaration's attributes.
-			HashSet<String> generics = new HashSet<String>(fn.generics);
-			SemanticType from = convert(fn.from.toSyntacticType(),generics);
-			SemanticType to = convert(fn.to.toSyntacticType(),generics);
-			typeAttr = new TypeAttribute(SemanticType.Tuple(from,to));
-			fn.attributes().add(typeAttr);
-		}
-		return (SemanticType.Tuple) typeAttr.type;
-	}
-	
-	private SemanticType getDefinitionType(WycsFile.Define fn) {
-		TypeAttribute typeAttr = fn.attribute(TypeAttribute.class);
-		if(typeAttr == null) {
-			// No type attribute on the given function declaration. Therefore,
-			// create one and it to the declaration's attributes.
-			HashSet<String> generics = new HashSet<String>(fn.generics);
-			SemanticType from = convert(fn.from.toSyntacticType(),generics);
-			typeAttr = new TypeAttribute(from);
-			fn.attributes().add(typeAttr);
-		}
-		return typeAttr.type;
-	}
-	
+		
 	/**
-	 * <p>
-	 * Convert a syntactic type into a semantic type. A syntactic type
-	 * represents something written at the source-level which may be invalid, or
-	 * not expressed in the minial form.
-	 * </p>
-	 * <p>
-	 * For example, consider a syntactic type <code>int | !int</code>. This is a
-	 * valid type at the source level, and appears to be a union of two types.
-	 * In fact, semantically, this type is equivalent to <code>any</code> and,
-	 * for the purposes of subtype testing, needs to be represented as such.
-	 * </p>
+	 * Calculate the most precise type that captures those possible values a
+	 * given expression can evaluate to.
 	 * 
-	 * 
-	 * @param type
-	 *            --- Syntactic type to be converted.
-	 * @param generics
-	 *            --- Set of declared generic variables.
+	 * @param e
 	 * @return
 	 */
-	private SemanticType convert(SyntacticType type, Set<String> generics) {
-		
-		if (type instanceof SyntacticType.Primitive) {
-			SyntacticType.Primitive p = (SyntacticType.Primitive) type;
-			return p.type;
-		} else if (type instanceof SyntacticType.Variable) {
-			SyntacticType.Variable p = (SyntacticType.Variable) type;
-			if(!generics.contains(p.var)) {
-				internalFailure("undeclared generic variable encountered (" + p + ")",
-						filename, type);
-				return null; // deadcode		
+	public static SemanticType returnType(Expr e) {
+		SemanticType type = e.attribute(TypeAttribute.class).type;
+		if (e instanceof Expr.Variable || e instanceof Expr.Constant
+				|| e instanceof Expr.Quantifier) {
+			return type; 
+		} else if(e instanceof Expr.Unary) {
+			Expr.Unary ue = (Expr.Unary) e;
+			switch(ue.op) {
+			case NOT:
+				return SemanticType.Bool;
+			case NEG:
+				return type;
+			case LENGTHOF:				
+				return SemanticType.Int;		
 			}
-			return SemanticType.Var(p.var);
-		} else if(type instanceof SyntacticType.Not) {
-			SyntacticType.Not t = (SyntacticType.Not) type;
-			return SemanticType.Not(convert(t.element,generics));
-		} else if(type instanceof SyntacticType.Set) {
-			SyntacticType.Set t = (SyntacticType.Set) type;
-			return SemanticType.Set(convert(t.element,generics));
-		} else if(type instanceof SyntacticType.Or) {
-			SyntacticType.Or t = (SyntacticType.Or) type;
-			SemanticType[] types = new SemanticType[t.elements.length];
-			for(int i=0;i!=t.elements.length;++i) {
-				types[i] = convert(t.elements[i],generics);
+		} else if(e instanceof Expr.Binary) {
+			Expr.Binary ue = (Expr.Binary) e;
+			switch(ue.op) {
+			case ADD:
+			case SUB:
+			case MUL:
+			case DIV:
+			case REM:
+			case SETUNION:
+			case SETINTERSECTION:
+			case LISTAPPEND:
+			case RANGE:
+				return type;
+			case EQ:
+			case NEQ:			
+			case IMPLIES:
+			case IFF:				
+			case LT:
+			case LTEQ:
+			case GT:
+			case GTEQ:				
+			case IN: 
+			case SUBSET:
+			case SUBSETEQ:
+			case SUPSET:
+			case SUPSETEQ: 
+				return SemanticType.Bool;							
 			}
-			return SemanticType.Or(types);
-		} else if(type instanceof SyntacticType.And) {
-			SyntacticType.And t = (SyntacticType.And) type;
-			SemanticType[] types = new SemanticType[t.elements.length];
-			for(int i=0;i!=t.elements.length;++i) {
-				types[i] = convert(t.elements[i],generics);
+		} else if(e instanceof Expr.Ternary) {
+			Expr.Ternary ue = (Expr.Ternary) e;
+			switch(ue.op) {
+			case UPDATE:
+			case SUBLIST:
+				return type;
 			}
-			return SemanticType.And(types);
-		} else if(type instanceof SyntacticType.Tuple) {
-			SyntacticType.Tuple t = (SyntacticType.Tuple) type;
-			SemanticType[] types = new SemanticType[t.elements.length];
-			for(int i=0;i!=t.elements.length;++i) {
-				types[i] = convert(t.elements[i],generics);
+		} else if(e instanceof Expr.Nary) {
+			Expr.Nary ue = (Expr.Nary) e;
+			switch(ue.op) {
+			case AND:
+			case OR:				
+				return SemanticType.Bool;		
+			case TUPLE:
+			case SET:
+			case LIST:
+				return type;
 			}
-			return SemanticType.Tuple(types);
+		} else if(e instanceof Expr.IndexOf) {
+			Expr.IndexOf ue = (Expr.IndexOf) e;
+			if(type instanceof SemanticType.EffectiveTuple) {
+				SemanticType.EffectiveTuple tt = (SemanticType.EffectiveTuple) type;				
+				Value.Integer idx = (Value.Integer) ((Expr.Constant) ue.index).value;
+				return tt.tupleElement(idx.value.intValue());
+			} else {
+				SemanticType.Set st = (SemanticType.Set) type;
+				SemanticType.EffectiveTuple tt = (SemanticType.EffectiveTuple) st.element();
+				return tt.tupleElement(1);
+			}
+		} else {
+			Expr.FunCall fc = (Expr.FunCall) e;
+			return ((SemanticType.Function) type).to();
 		}
-		
-		internalFailure("unknown syntactic type encountered",
-				filename, type);
-		return null; // deadcode
+		// should be deadcode.
+		throw new IllegalArgumentException("Invalid opcode for expression");
 	}
 	
 	/**

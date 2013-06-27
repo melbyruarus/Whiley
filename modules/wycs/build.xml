@@ -2,15 +2,17 @@
   <import file="../../config.xml"/>  
 
   <target name="compile-wycs">
-    <taskdef name="wyone" classname="wyone.util.WyoneAntTask" classpath="../wyone/src/"/>
-    <wyone srcdir="src/" debug="false" source="wycs/lang/Types.wyone" output="wycs/lang/Types.java"/>
-    <wyone srcdir="src/" debug="false" source="wycs/solver/Solver.wyone" output="wycs/solver/Solver.java"/>
-    <javac memoryMaximumSize="2048m" fork="true" debug="true" debuglevel="vars,lines,source" source="1.6" includeantruntime="true"  classpath="../wybs/src/;../wyone/src">
+    <taskdef name="wyrl" classname="wyrl.util.WyrlAntTask" classpath="../wyrl/src/"/>
+    <wyrl srcdir="src/" debug="false" source="wycs/core/Types.wyrl" output="wycs/core/Types.java"/>
+    <wyrl srcdir="src/" debug="false" source="wycs/solver/Solver.wyrl" output="wycs/solver/Solver.java"/>
+    <javac memoryMaximumSize="2048m" fork="true" debug="true" debuglevel="vars,lines,source" source="1.6" includeantruntime="true"  classpath="../wybs/src/;../wyrl/src">
       <src path="src"/>
       <include name="*/**"/>
       <exclude name="*/**/package-info.java"/> 
       <exclude name="wycs/testing/**"/> 
     </javac>
+    <taskdef name="wycs" classname="wycs.util.WycsAntTask" classpath="../wybs/src/:../wyrl/src/:../wyc/src/:src/"/>
+    <wycs wyaldir="stdlib/" includes="*/**.wycs"/>
   </target>
 
   <target name="build" depends="compile-wycs">
