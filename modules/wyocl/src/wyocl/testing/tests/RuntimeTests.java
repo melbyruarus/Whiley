@@ -18,5 +18,4 @@ public class RuntimeTests extends TestHarness {
 	@Test public void Arithmatic() { runTest("Arithmatic"); }
 	@Test public void Remainder() { runTest("Remainder"); }
 	@Test public void Logic() { runTest("Logic"); }
-	@Test public void For_Valid_2_RuntimeTest() { runTest("For_Valid_2"); }
 }
