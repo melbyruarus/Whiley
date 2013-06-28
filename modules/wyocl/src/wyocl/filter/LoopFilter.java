@@ -126,7 +126,8 @@ public class LoopFilter {
 			Argument arg = it.next();
 			if(arg.register == forAll.sourceOperand) {
 				if(!arg.readonly) {
-					throw new RuntimeException("GPU cannot loop over an array that is being simultaniously updated");
+					// FIXME: re-add this check when read-only primitive types are supported by runtime (see ref:2123sdsds)
+					//throw new RuntimeException("GPU cannot loop over an array that is being simultaniously updated");
 				}
 				it.remove();
 			}
@@ -259,6 +260,11 @@ public class LoopFilter {
 		// Return results
 		arguments.addAll(dependancies.values());
 		
+		// TODO: don't have to do this. Need to add support to runtime though ref:2123sdsds
+		for (Argument arg : arguments) {
+			arg.setReadonly(false);
+		}
+			
 		return true;
 	}
 
