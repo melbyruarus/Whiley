@@ -32,6 +32,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+
 import wybs.lang.Builder;
 import wybs.lang.Logger;
 import wybs.lang.NameSpace;
@@ -41,6 +43,7 @@ import wyil.lang.Block;
 import wyil.lang.Code;
 import wyil.lang.Type;
 import wyil.lang.WyilFile;
+import wyocl.ar.ARGenerator;
 import wyocl.filter.Argument;
 import wyocl.filter.LoopFilter;
 import wyocl.lang.ClFile;
@@ -169,6 +172,12 @@ public class Wyil2OpenClBuilder implements Builder {
 				break;
 			case FILTER_RESULTS_READY:
 				if(loopFilter.wasLoopFiltered()) {
+					Set<ARGenerator.CFGNode> exits = new HashSet<ARGenerator.CFGNode>();
+					ARGenerator.CFGNode root = ARGenerator.processEntries(loopFilter.getFilteredEntries(), exits);
+					System.err.println(root);
+					for(ARGenerator.CFGNode n : exits) {
+						System.err.println(n);
+					}
 					writeOpenCLKernel(loopFilter.getFilteredEntries(), loopFilter.getKernelArguments(), declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
 				}
 				break;
