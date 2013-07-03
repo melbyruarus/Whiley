@@ -1,5 +1,7 @@
 package wyocl.ar;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -10,16 +12,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
-
 import wybs.util.Pair;
 import wyil.lang.Block.Entry;
 import wyil.lang.Code;
 import wyil.lang.Constant;
 import wyil.lang.Type;
-import wyocl.ar.ARGenerator.Bytecode.Loop;
+import wyocl.ar.utils.NotADAGException;
+import wyocl.ar.utils.TopologicalSorter;
+import wyocl.ar.utils.TopologicalSorter.DAGSortNode;
 
 public class ARGenerator {
+	private static boolean DEBUG = false;
+	
 	public static abstract class RegisterNode {
 		public Set<RegisterNode> previous = new HashSet<RegisterNode>();
 		public RegisterNode next;
@@ -28,186 +32,63 @@ public class ARGenerator {
 		public Type type;
 	}
 	
-	public static abstract class Bytecode {
-		public Set<RegisterNode> modifiedRegisters = new HashSet<RegisterNode>();
-		public Set<RegisterNode> registersDependedUpon = new HashSet<RegisterNode>();
-		public CFGNode cfgNode;
-		
-		public static interface Data {
-		}
-		
-		public static interface Control {
-		}
-		
-		public static interface Loop extends Control {
-			String loopEndLabel();
-		}
-		
-		public static interface Jump extends Control {
-		}
-		
-		public static interface Target {
-			public String name();
-		}
-		
-		public static class Unary extends Bytecode implements Data {
-			private final Code.UnArithOp code;
-			
-			public Unary(Code.UnArithOp code) { this.code = code; }
-		}
-		
-		public static class Binary extends Bytecode implements Data {
-			private final Code.BinArithOp code;
-			
-			public Binary(Code.BinArithOp code) { this.code = code; }
-		}
-		
-		public static class ConstLoad extends Bytecode implements Data {
-			private final Code.Const code;
-			
-			public ConstLoad(Code.Const code) { this.code = code; }
-		}
-		
-		public static class Assign extends Bytecode implements Data {
-			private final Code.Assign code;
-			
-			public Assign(Code.Assign code) { this.code = code; }
-		}
-		
-		public static class Move extends Bytecode implements Data {
-			private final Code.Move code;
-			
-			public Move(Code.Move code) { this.code = code; }
-		}
-		
-		public static class Convert extends Bytecode implements Data {
-			private final Code.Convert code;
-			
-			public Convert(Code.Convert code) { this.code = code; }
-		}
-		
-		public static class Load extends Bytecode implements Data {
-			private final Code.IndexOf code;
-			
-			public Load(Code.IndexOf code) { this.code = code; }
-		}
-		
-		public static class LengthOf extends Bytecode implements Data {
-			private final Code.LengthOf code;
-			
-			public LengthOf(Code.LengthOf code) { this.code = code; }
-		}
-		
-		public static class TupleLoad extends Bytecode implements Data {
-			private final Code.TupleLoad code;
-			
-			public TupleLoad(Code.TupleLoad code) { this.code = code; }
-		}
-		
-		public static class Update extends Bytecode implements Data {
-			private final Code.Update code;
-			
-			public Update(Code.Update code) { this.code = code; }
-		}
-		
-		public static class For extends Bytecode implements Loop {
-			private final Code.ForAll code;
-			
-			public For(Code.ForAll code) { this.code = code; }
-
-			@Override
-			public String loopEndLabel() {
-				return code.target;
-			}
-		}
-		
-		public static class While extends Bytecode implements Loop {
-			private final Code.Loop code;
-			
-			public While(Code.Loop code) { this.code = code; }
-			
-			@Override
-			public String loopEndLabel() {
-				return code.target;
-			}
-		}
-		
-		public static class UnconditionalJump extends Bytecode implements Jump {
-			private final Code.Goto code;
-			
-			public UnconditionalJump(Code.Goto code) { this.code = code; }
-
-			public String target() {
-				return code.target;
-			}
-		}
-		
-		public static class ConditionalJump extends Bytecode implements Jump {
-			private final Code.If code;
-			
-			public ConditionalJump(Code.If code) { this.code = code; }
-
-			public String conditionMetTarget() {
-				return code.target;
-			}
-		}
-		
-		public static class Switch extends Bytecode implements Jump {
-			private final Code.Switch code;
-			
-			public Switch(Code.Switch code) { this.code = code; }
-			
-			public List<Pair<Constant, String>> branchTargets() {
-				return code.branches;
-			}
-
-			public String defaultTarget() {
-				return code.defaultTarget;
-			}
-		}
-		
-		public static class Label extends Bytecode implements Control, Target {
-			private final Code.Label code;
-			
-			public Label(Code.Label code) { this.code = code; }
-
-			@Override
-			public String name() {
-				return code.label;
-			}
-		}
-		
-		public static class LoopEnd extends Bytecode implements Control, Target {
-			private final Code.LoopEnd code;
-			
-			public LoopEnd(Code.LoopEnd code) { this.code = code; }
-			
-			@Override
-			public String name() {
-				return code.label;
-			}
-		}
-		
-		public static class Return extends Bytecode implements Jump {
-			private final Code.Return code;
-			
-			public Return(Code.Return code) { this.code = code; }
-		}
-		
-		public static class Invoke extends Bytecode {
-			private final Code.Invoke code;
-			
-			public Invoke(Code.Invoke code) { this.code = code; }
-		}
-	}
-	
-	public static abstract class CFGNode {
+	public static abstract class CFGNode implements TopologicalSorter.DAGSortNode {
 		public Set<CFGNode> previous = new HashSet<CFGNode>();
+		public int identifier;
+
+		public abstract Set<CFGNode> getNextNodes();
+		
+		@Override
+		public String toString() {
+			StringWriter sw = new StringWriter();
+			PrintWriter pw = new PrintWriter(sw);
+			
+			pw.print(this.getClass().getSimpleName());
+			pw.print('(');
+			pw.print(identifier);
+			pw.print(") previous:{");
+			
+			String sep = "";
+			for(CFGNode n : this.previous) {
+				if(n != null) {
+					pw.print(sep);
+					pw.print(n.identifier);
+					sep = ", ";
+				}
+			}
+			
+			pw.print("} next:{");
+			
+			sep = "";
+			for(CFGNode n : this.getNextNodes()) {
+				if(n != null) {
+					pw.print(sep);
+					pw.print(n.identifier);
+					sep = ", ";
+				}
+			}
+			
+			pw.print('}');
+			
+			return sw.toString();
+		}
+		
+		@Override
+		public Collection<DAGSortNode> getNextNodesForSorting() {
+			return new HashSet<DAGSortNode>(this.getNextNodes());
+		}
 	}
 	
 	public static class VanillaCFGNode extends CFGNode {
 		public Block body = new Block();
 		public CFGNode next;
+		
+		@Override
+		public Set<CFGNode> getNextNodes() {
+			Set<CFGNode> following = new HashSet<CFGNode>();
+			following.add(next);
+			return following;
+		}
 	}
 		
 	public static class Block {
@@ -218,7 +99,6 @@ public class ARGenerator {
 		private final Bytecode.Loop abstractLoopBytecode;
 		
 		public CFGNode body;
-		public CFGNode after;
 		public Set<LoopBreakNode> breakNodes = new HashSet<LoopBreakNode>();
 		public final int startIndex;
 		public final int endIndex;
@@ -228,6 +108,13 @@ public class ARGenerator {
 		
 		public String loopEndLabel() {
 			return abstractLoopBytecode.loopEndLabel();
+		}
+		
+		@Override
+		public Set<CFGNode> getNextNodes() {
+			Set<CFGNode> following = new HashSet<CFGNode>();
+			following.add(body);
+			return following;
 		}
 	}
 	
@@ -249,12 +136,28 @@ public class ARGenerator {
 		public CFGNode next;
 		
 		LoopBreakNode(LoopNode loop) {this.loop = loop;}
+		
+		@Override
+		public Set<CFGNode> getNextNodes() {
+			Set<CFGNode> following = new HashSet<CFGNode>();
+			following.add(next);
+			return following;
+		}
 	}
 	
 	public static class LoopEndNode extends CFGNode {
 		private final LoopNode loop;
 		
+		public CFGNode next;
+		
 		LoopEndNode(LoopNode loop) {this.loop = loop;}
+		
+		@Override
+		public Set<CFGNode> getNextNodes() {
+			Set<CFGNode> following = new HashSet<CFGNode>();
+			following.add(next);
+			return following;
+		}
 	}
 	
 	/**
@@ -279,6 +182,16 @@ public class ARGenerator {
 		public String defaultTarget() {
 			return switchBytecode.defaultTarget();
 		}
+		
+		@Override
+		public Set<CFGNode> getNextNodes() {
+			Set<CFGNode> following = new HashSet<CFGNode>();
+			following.add(defaultBranch);
+			for(Pair<Constant, CFGNode> p : branches) {
+				following.add(p.second());
+			}
+			return following;
+		}
 	}
 	
 	/**
@@ -298,14 +211,46 @@ public class ARGenerator {
 		public String conditionMetTarget() {
 			return conditionalJump.conditionMetTarget();
 		}
+		
+		@Override
+		public Set<CFGNode> getNextNodes() {
+			Set<CFGNode> following = new HashSet<CFGNode>();
+			following.add(conditionMet);
+			following.add(conditionUnmet);
+			return following;
+		}
 	}
 	
-	public static CFGNode processEntries(List<Entry> entries, Set<CFGNode> exitPoints) {
+	public static class ReturnNode extends CFGNode {
+		@Override
+		public Set<CFGNode> getNextNodes() {
+			return new HashSet<CFGNode>();
+		}
+	}
+	
+	public static CFGNode processEntries(List<Entry> entries, Set<ReturnNode> exitPoints) {
 		CFGNode rootNode = recursivlyConstructRoughCFG(entries, indexLabels(entries), new HashMap<Integer, CFGNode>(), new HashMap<String, LoopNode>(), 0, exitPoints);
+		populateIdentifiers(rootNode, 0);
+		
+		try {
+			ARPrinter.print(rootNode);
+		} catch (NotADAGException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		
 		return rootNode;
 	}
 	
+	private static int populateIdentifiers(CFGNode node, int id) {
+		node.identifier = id;
+		id++;
+		for(CFGNode n : node.getNextNodes()) {
+			id = populateIdentifiers(n, id);
+		}
+		return id;
+	}
+
 	private static Map<String, Integer> indexLabels(List<Entry> entries) {
 		Map<String, Integer> map = new HashMap<String, Integer>();
 		
@@ -321,28 +266,36 @@ public class ARGenerator {
 		return map;
 	}
 
-	private static CFGNode recursivlyConstructRoughCFG(List<Entry> entries, Map<String, Integer> labelIndexes, Map<Integer, CFGNode> alreadyProcessedEntries, Map<String, LoopNode> loopEndIndex, int processingIndex,  Set<CFGNode> exitPoints) {
-		System.err.println("Recursing to "+processingIndex);
+	private static CFGNode recursivlyConstructRoughCFG(List<Entry> entries, Map<String, Integer> labelIndexes, Map<Integer, CFGNode> alreadyProcessedEntries, Map<String, LoopNode> loopEndIndex, int processingIndex,  Set<ReturnNode> exitPoints) {
+		if(DEBUG) {System.err.println("Recursing to "+processingIndex);}
 		if(alreadyProcessedEntries.containsKey(processingIndex)) {
-			System.err.println("Nothing to do");
+			if(DEBUG) {System.err.println("Nothing to do");}
 			return alreadyProcessedEntries.get(processingIndex);
 		}
 		else {
 			VanillaCFGNode node = new VanillaCFGNode();
-			alreadyProcessedEntries.put(processingIndex, node);
-			System.err.println("Creating node "+node);
+			if(DEBUG) {System.err.println("Creating node "+node);}
 			
 			for(int i=processingIndex;i<entries.size();i++) {
-				Bytecode bytecode = processCode(entries.get(i).code);
+				if(i > processingIndex) {
+					alreadyProcessedEntries.put(processingIndex, node);
+				}
 				
-				System.err.println("Processing code "+bytecode);
+				Bytecode bytecode = Bytecode.bytecodeForCode(entries.get(i).code);
+				
+				if(DEBUG) {System.err.println("Processing code "+bytecode);}
 				
 				if(bytecode instanceof Bytecode.Control) {
 					if(bytecode instanceof Bytecode.LoopEnd) {
-						CFGNode next = loopEndIndex.get(((Bytecode.LoopEnd)bytecode).name()).endNode;
-						node.next = next;
-						next.previous.add(node);
-						return node;
+						LoopEndNode end = loopEndIndex.get(((Bytecode.LoopEnd)bytecode).name()).endNode;
+						if(i == processingIndex) {
+							return end;
+						}
+						else {
+							node.next = end;
+							end.previous.add(node);
+							return node;
+						}
 					}
 					else if(bytecode instanceof Bytecode.Label) {
 						if(i == processingIndex) {
@@ -356,68 +309,83 @@ public class ARGenerator {
 						}
 					}
 					else if(bytecode instanceof Bytecode.Jump) {
+						CFGNode nextNode = null;
+						
 						if(bytecode instanceof Bytecode.UnconditionalJump) {
 							Bytecode.UnconditionalJump jump = (Bytecode.UnconditionalJump)bytecode;
 							int target = labelIndexes.get(jump.target());
-							CFGNode next = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints));
-							node.next = next;
-							next.previous.add(node);
-							return node;
+							nextNode = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints));
 						}
 						else if(bytecode instanceof Bytecode.ConditionalJump) {
-							ConditionalJumpNode next = new ConditionalJumpNode((Bytecode.ConditionalJump)bytecode);
-							System.err.println("Creating node "+next);
-							int conditionMetTarget = labelIndexes.get(next.conditionMetTarget());
-							next.conditionMet = createLoopBreaks(loopEndIndex, i, conditionMetTarget, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, conditionMetTarget, exitPoints));
-							next.conditionMet.previous.add(next);
+							ConditionalJumpNode jumpNode = new ConditionalJumpNode((Bytecode.ConditionalJump)bytecode);
+							if(DEBUG) {System.err.println("Creating node "+jumpNode);}
+							int conditionMetTarget = labelIndexes.get(jumpNode.conditionMetTarget());
+							jumpNode.conditionMet = createLoopBreaks(loopEndIndex, i, conditionMetTarget, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, conditionMetTarget, exitPoints));
+							jumpNode.conditionMet.previous.add(jumpNode);
 							int conditionUnmetTarget = i+1;
-							next.conditionUnmet = createLoopBreaks(loopEndIndex, i, conditionUnmetTarget, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, conditionUnmetTarget, exitPoints));
-							next.conditionUnmet.previous.add(next);
-							node.next = next;
-							next.previous.add(node);
-							return node;
+							jumpNode.conditionUnmet = createLoopBreaks(loopEndIndex, i, conditionUnmetTarget, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, conditionUnmetTarget, exitPoints));
+							jumpNode.conditionUnmet.previous.add(jumpNode);
+							
+							nextNode = jumpNode;
 						}
 						else if(bytecode instanceof Bytecode.Return) {
-							node.next = null;
-							exitPoints.add(node);
-							return node;
+							ReturnNode jumpNode = new ReturnNode();
+							exitPoints.add(jumpNode);
+							
+							nextNode = jumpNode;
 						}
 						else if(bytecode instanceof Bytecode.Switch) {
-							MultiConditionalJumpNode next = new MultiConditionalJumpNode((Bytecode.Switch)bytecode);
-							System.err.println("Creating node "+next);
-							for(Pair<Constant, String> branch : next.branchTargets()) {
+							MultiConditionalJumpNode jumpNode = new MultiConditionalJumpNode((Bytecode.Switch)bytecode);
+							if(DEBUG) {System.err.println("Creating node "+jumpNode);}
+							for(Pair<Constant, String> branch : jumpNode.branchTargets()) {
 								int target = labelIndexes.get(branch.second());
 								Pair<Constant, CFGNode> branchMatchedPair = new Pair<Constant, CFGNode>(branch.first(), createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints)));
-								branchMatchedPair.second().previous.add(next);
+								branchMatchedPair.second().previous.add(jumpNode);
 							}
-							int target = labelIndexes.get(next.defaultBranch);
-							next.defaultBranch = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints));
-							next.defaultBranch.previous.add(next);
-							node.next = next;
-							next.previous.add(node);
+							int target = labelIndexes.get(jumpNode.defaultBranch);
+							jumpNode.defaultBranch = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints));
+							jumpNode.defaultBranch.previous.add(jumpNode);
+							
+							nextNode = jumpNode;
+						}
+						
+						if(i == processingIndex) {
+							return nextNode;
+						}
+						else {
+							node.next = nextNode;
+							nextNode.previous.add(node);
 							return node;
 						}
 					}
 					else if(bytecode instanceof Bytecode.Loop) {
 						Bytecode.Loop loopBytecode = (Bytecode.Loop)bytecode;
-						LoopNode next;
+						LoopNode loopNode;
 						if(bytecode instanceof Bytecode.For){ 
-							next = new ForLoopNode((Bytecode.For)loopBytecode, i, labelIndexes.get(loopBytecode.loopEndLabel()));
+							loopNode = new ForLoopNode((Bytecode.For)loopBytecode, i, labelIndexes.get(loopBytecode.loopEndLabel()));
 						}
 						else { 
-							next = new WhileLoopNode((Bytecode.While)loopBytecode, i, labelIndexes.get(loopBytecode.loopEndLabel()));
+							loopNode = new WhileLoopNode((Bytecode.While)loopBytecode, i, labelIndexes.get(loopBytecode.loopEndLabel()));
 						}
 						
-						System.err.println("Creating node "+next);
+						if(DEBUG) {System.err.println("Creating node "+loopNode);}
 						
-						alreadyProcessedEntries.put(processingIndex, next.endNode);
-						loopEndIndex.put(loopBytecode.loopEndLabel(), next);
+						alreadyProcessedEntries.put(processingIndex, loopNode.endNode);
+						loopEndIndex.put(loopBytecode.loopEndLabel(), loopNode);
 						
-						next.body = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, i+1, exitPoints);
-						next.after = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, labelIndexes.get(next.loopEndLabel())+1, exitPoints);
-						node.next = next;
-						next.previous.add(node);
-						return next;
+						loopNode.body = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, i+1, exitPoints);
+						loopNode.body.previous.add(loopNode);
+						loopNode.endNode.next = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, labelIndexes.get(loopNode.loopEndLabel())+1, exitPoints);
+						loopNode.endNode.next.previous.add(loopNode.endNode);
+						
+						if(i == processingIndex) {
+							return loopNode;
+						}
+						else {
+							node.next = loopNode;
+							loopNode.previous.add(node);
+							return node;
+						}
 					}
 				}
 				else {
@@ -425,13 +393,23 @@ public class ARGenerator {
 				}
 			}
 			
-			exitPoints.add(node);
-			return node;
+			ReturnNode end = new ReturnNode();
+			exitPoints.add(end);
+			
+			if(node.body.instructions.size() > 0) {
+				node.next = end;
+				end.previous.add(node);
+				
+				return node;
+			}
+			else {
+				return end;
+			}
 		}
 	}
 
 	private static CFGNode createLoopBreaks(Map<String, LoopNode> loopEndIndex, int jumpFromIndex, int jumpToIndex, CFGNode cfgAfter) {
-		System.err.println("Checking for loop breaks");
+		if(DEBUG) {System.err.println("Checking for loop breaks");}
 		Collection<LoopNode> loops = loopEndIndex.values();
 		List<LoopNode> loopsBreakingFrom = new ArrayList<LoopNode>();
 		
@@ -442,11 +420,11 @@ public class ARGenerator {
 		}
 		
 		if(loopsBreakingFrom.size() == 0) {
-			System.err.println("Didn't find any");
+			if(DEBUG) {System.err.println("Didn't find any");}
 			return cfgAfter;
 		}
 		else {
-			System.err.println("Found "+loopsBreakingFrom);
+			if(DEBUG) {System.err.println("Found "+loopsBreakingFrom);}
 			Collections.sort(loopsBreakingFrom, new Comparator<LoopNode>() {
 				@Override
 				public int compare(LoopNode arg0, LoopNode arg1) {
@@ -469,147 +447,6 @@ public class ARGenerator {
 			}
 			
 			return last;
-		}
-	}
-
-	private static Bytecode processCode(Code code) {
-		if(code instanceof Code.ForAll) {
-			return new Bytecode.For((Code.ForAll)code);
-		}
-		else if(code instanceof Code.Loop) { // Must be after Code.ForAll
-			return new Bytecode.While((Code.Loop)code);
-		}
-		else if(code instanceof Code.Nop) {
-			return null;
-		}
-		else if(code instanceof Code.TryCatch) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.Const) {
-			return new Bytecode.ConstLoad((Code.Const)code);
-		}
-		else if(code instanceof Code.Goto) {
-			return new Bytecode.UnconditionalJump((Code.Goto)code);
-		}
-		else if(code instanceof Code.TryEnd) { // Must be before Code.Label
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.LoopEnd) {
-			return new Bytecode.LoopEnd((Code.LoopEnd)code);
-		}
-		else if(code instanceof Code.Label) {
-			return new Bytecode.Label((Code.Label)code);
-		}
-		else if(code instanceof Code.Assert) {
-			return null; // FIXME: this should probably do something else
-		}
-		else if(code instanceof Code.Assign) {
-			return new Bytecode.Assign((Code.Assign)code);
-		}
-		else if(code instanceof Code.Convert) {
-			return new Bytecode.Convert((Code.Convert)code);
-		}
-		else if(code instanceof Code.Debug) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.Dereference) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.Assume) {
-			return null; // FIXME: this should probably do something else
-		}
-		else if(code instanceof Code.FieldLoad) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.If) {
-			return  new Bytecode.ConditionalJump((Code.If)code);
-		}
-		else if(code instanceof Code.IfIs) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.IndexOf) {
-			return new Bytecode.Load((Code.IndexOf)code);
-		}
-		else if(code instanceof Code.IndirectInvoke) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.Invert) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.Invoke) {
-			return new Bytecode.Invoke((Code.Invoke)code);
-		}
-		else if(code instanceof Code.Lambda) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.LengthOf) {
-			return new Bytecode.LengthOf((Code.LengthOf)code);
-		}
-		else if(code instanceof Code.Move) {
-			return new Bytecode.Move((Code.Move)code);
-		}
-		else if(code instanceof Code.NewList) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.NewMap) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.NewObject) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.NewRecord) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.NewSet) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.NewTuple) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.Not) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.Return) {
-			return new Bytecode.Return((Code.Return)code);
-		}
-		else if(code instanceof Code.SubList) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.SubString) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.Switch) {
-			return new Bytecode.Switch((Code.Switch)code);
-		}
-		else if(code instanceof Code.Throw) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.TupleLoad) {
-			return new Bytecode.TupleLoad((Code.TupleLoad)code);
-		}
-		else if(code instanceof Code.Update) {
-			return new Bytecode.Update((Code.Update)code);
-		}
-		else if(code instanceof Code.Void) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.BinArithOp) {
-			return new Bytecode.Binary((Code.BinArithOp)code);
-		}
-		else if(code instanceof Code.BinListOp) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.BinSetOp) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.BinStringOp) {
-			throw new NotImplementedException();
-		}
-		else if(code instanceof Code.UnArithOp) {
-			return new Bytecode.Unary((Code.UnArithOp)code);
-		}
-		else {
-			throw new RuntimeException("Unknown bytecode encountered: "+code+" ("+code.getClass()+")");
 		}
 	}
 }

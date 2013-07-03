@@ -87,7 +87,6 @@ public class OpenCLOpWriter {
 		}
 		
 		for(Block.Entry e : filteredEntries) {
-			System.out.println(e.code);
 			writeBlockEntry(e, writer);
 		}
 		
