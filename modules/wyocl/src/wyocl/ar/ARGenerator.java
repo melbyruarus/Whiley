@@ -219,8 +219,47 @@ public class ARGenerator {
 		}
 	}
 	
-	public static CFGNode processEntries(List<Entry> entries, Set<ReturnNode> exitPoints) {
-		CFGNode rootNode = recursivlyConstructRoughCFG(entries, indexLabels(entries), new HashMap<Integer, CFGNode>(), new HashMap<String, LoopNode>(), 0, exitPoints);
+	public static class UnresolvedTargetNode extends CFGNode {
+		private final boolean isUnresolvedLabel;
+		private final String targetLabel;
+		private final int targetLine;
+		
+		public UnresolvedTargetNode(String target) {
+			isUnresolvedLabel = true;
+			targetLabel = target;
+			targetLine = 0;
+		}
+
+		public UnresolvedTargetNode(int target) {
+			isUnresolvedLabel = false;
+			targetLabel = null;
+			targetLine = target;
+		}
+		
+		public boolean isUnresolvedLabel() {
+			return isUnresolvedLabel;
+		}
+		
+		public String getUnresolvedLabel() {
+			return targetLabel;
+		}
+		
+		public int getUnresolvedLine() {
+			return targetLine;
+		}
+
+		@Override
+		public void getNextNodes(Set<CFGNode> nodes) {
+		}
+		
+		@Override
+		public String toString() {
+			return super.toString() + " " + (isUnresolvedLabel ? targetLabel : targetLine);
+		}
+	}
+	
+	public static CFGNode processEntries(List<Entry> entries, Set<ReturnNode> exitPoints, Set<UnresolvedTargetNode> unresolvedTargets) {
+		CFGNode rootNode = recursivlyConstructRoughCFG(entries, indexLabels(entries), new HashMap<Integer, CFGNode>(), new HashMap<String, LoopNode>(), 0, exitPoints, unresolvedTargets);
 		populateIdentifiers(rootNode, 0);
 		
 		try {
@@ -249,6 +288,7 @@ public class ARGenerator {
 		
 		int index = 0;
 		for(Entry e : entries) {
+			System.err.println(e.code);
 			if(e.code instanceof Code.Label) {
 				Code.Label l = (Code.Label)e.code;
 				map.put(l.label, index);
@@ -259,7 +299,7 @@ public class ARGenerator {
 		return map;
 	}
 
-	private static CFGNode recursivlyConstructRoughCFG(List<Entry> entries, Map<String, Integer> labelIndexes, Map<Integer, CFGNode> alreadyProcessedEntries, Map<String, LoopNode> loopEndIndex, int processingIndex,  Set<ReturnNode> exitPoints) {
+	private static CFGNode recursivlyConstructRoughCFG(List<Entry> entries, Map<String, Integer> labelIndexes, Map<Integer, CFGNode> alreadyProcessedEntries, Map<String, LoopNode> loopEndIndex, int processingIndex,  Set<ReturnNode> exitPoints, Set<UnresolvedTargetNode> unresolvedTargets) {
 		if(DEBUG) {System.err.println("Recursing to "+processingIndex);}
 		if(alreadyProcessedEntries.containsKey(processingIndex)) {
 			if(DEBUG) {System.err.println("Nothing to do");}
@@ -270,7 +310,7 @@ public class ARGenerator {
 			if(DEBUG) {System.err.println("Creating node "+node);}
 			
 			for(int i=processingIndex;i<entries.size();i++) {
-				if(i > processingIndex) {
+				if(node.body.instructions.size() > 0) {
 					alreadyProcessedEntries.put(processingIndex, node);
 				}
 				
@@ -278,112 +318,175 @@ public class ARGenerator {
 				
 				if(DEBUG) {System.err.println("Processing code "+bytecode);}
 				
-				if(bytecode instanceof Bytecode.Control) {
-					if(bytecode instanceof Bytecode.LoopEnd) {
-						LoopEndNode end = loopEndIndex.get(((Bytecode.LoopEnd)bytecode).name()).endNode;
-						if(i == processingIndex) {
-							return end;
-						}
-						else {
-							node.next = end;
-							end.previous.add(node);
-							return node;
-						}
-					}
-					else if(bytecode instanceof Bytecode.Label) {
-						if(i == processingIndex) {
-							// Do nothing
-						}
-						else {
-							CFGNode next = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, i, exitPoints);
-							node.next = next;
-							next.previous.add(node);
-							return node;
-						}
-					}
-					else if(bytecode instanceof Bytecode.Jump) {
-						CFGNode nextNode = null;
-						
-						if(bytecode instanceof Bytecode.UnconditionalJump) {
-							Bytecode.UnconditionalJump jump = (Bytecode.UnconditionalJump)bytecode;
-							int target = labelIndexes.get(jump.target());
-							nextNode = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints));
-						}
-						else if(bytecode instanceof Bytecode.ConditionalJump) {
-							ConditionalJumpNode jumpNode = new ConditionalJumpNode((Bytecode.ConditionalJump)bytecode);
-							if(DEBUG) {System.err.println("Creating node "+jumpNode);}
-							int conditionMetTarget = labelIndexes.get(jumpNode.conditionMetTarget());
-							jumpNode.conditionMet = createLoopBreaks(loopEndIndex, i, conditionMetTarget, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, conditionMetTarget, exitPoints));
-							jumpNode.conditionMet.previous.add(jumpNode);
-							int conditionUnmetTarget = i+1;
-							jumpNode.conditionUnmet = createLoopBreaks(loopEndIndex, i, conditionUnmetTarget, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, conditionUnmetTarget, exitPoints));
-							jumpNode.conditionUnmet.previous.add(jumpNode);
-							
-							nextNode = jumpNode;
-						}
-						else if(bytecode instanceof Bytecode.Return) {
-							ReturnNode jumpNode = new ReturnNode();
-							exitPoints.add(jumpNode);
-							
-							nextNode = jumpNode;
-						}
-						else if(bytecode instanceof Bytecode.Switch) {
-							MultiConditionalJumpNode jumpNode = new MultiConditionalJumpNode((Bytecode.Switch)bytecode);
-							if(DEBUG) {System.err.println("Creating node "+jumpNode);}
-							for(Pair<Constant, String> branch : jumpNode.branchTargets()) {
-								int target = labelIndexes.get(branch.second());
-								Pair<Constant, CFGNode> branchMatchedPair = new Pair<Constant, CFGNode>(branch.first(), createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints)));
-								branchMatchedPair.second().previous.add(jumpNode);
+				if(bytecode != null) {
+					if(bytecode instanceof Bytecode.Control) {
+						if(bytecode instanceof Bytecode.LoopEnd) {
+							LoopEndNode end = loopEndIndex.get(((Bytecode.LoopEnd)bytecode).name()).endNode;
+							if(node.body.instructions.size() == 0) {
+								return end;
 							}
-							int target = labelIndexes.get(jumpNode.defaultBranch);
-							jumpNode.defaultBranch = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints));
-							jumpNode.defaultBranch.previous.add(jumpNode);
+							else {
+								node.next = end;
+								end.previous.add(node);
+								return node;
+							}
+						}
+						else if(bytecode instanceof Bytecode.Label) {
+							if(node.body.instructions.size() == 0) {
+								// Do nothing
+							}
+							else {
+								CFGNode next = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, i, exitPoints, unresolvedTargets);
+								node.next = next;
+								next.previous.add(node);
+								return node;
+							}
+						}
+						else if(bytecode instanceof Bytecode.Jump) {
+							CFGNode nextNode = null;
 							
-							nextNode = jumpNode;
+							if(bytecode instanceof Bytecode.UnconditionalJump) {
+								Bytecode.UnconditionalJump jump = (Bytecode.UnconditionalJump)bytecode;
+								Integer target = labelIndexes.get(jump.target());
+								if(target != null) {
+									nextNode = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints, unresolvedTargets));
+								}
+								else {
+									nextNode = new UnresolvedTargetNode(jump.target());
+									unresolvedTargets.add((UnresolvedTargetNode)nextNode);
+								}
+							}
+							else if(bytecode instanceof Bytecode.ConditionalJump) {
+								ConditionalJumpNode jumpNode = new ConditionalJumpNode((Bytecode.ConditionalJump)bytecode);
+								if(DEBUG) {System.err.println("Creating node "+jumpNode);}
+								Integer conditionMetTarget = labelIndexes.get(jumpNode.conditionMetTarget());
+								if(conditionMetTarget != null) {
+									jumpNode.conditionMet = createLoopBreaks(loopEndIndex, i, conditionMetTarget, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, conditionMetTarget, exitPoints, unresolvedTargets));
+								}
+								else {
+									jumpNode.conditionMet = new UnresolvedTargetNode(jumpNode.conditionMetTarget());
+									unresolvedTargets.add((UnresolvedTargetNode)jumpNode.conditionMet);
+								}
+								jumpNode.conditionMet.previous.add(jumpNode);
+								int conditionUnmetTarget = i+1;
+								if(conditionUnmetTarget < entries.size()) {
+									jumpNode.conditionUnmet = createLoopBreaks(loopEndIndex, i, conditionUnmetTarget, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, conditionUnmetTarget, exitPoints, unresolvedTargets));
+								}
+								else {
+									jumpNode.conditionUnmet = new UnresolvedTargetNode(conditionUnmetTarget);
+									unresolvedTargets.add((UnresolvedTargetNode)jumpNode.conditionUnmet);
+								}
+								jumpNode.conditionUnmet.previous.add(jumpNode);
+								
+								nextNode = jumpNode;
+							}
+							else if(bytecode instanceof Bytecode.Return) {
+								ReturnNode jumpNode = new ReturnNode();
+								exitPoints.add(jumpNode);
+								
+								nextNode = jumpNode;
+							}
+							else if(bytecode instanceof Bytecode.Switch) {
+								MultiConditionalJumpNode jumpNode = new MultiConditionalJumpNode((Bytecode.Switch)bytecode);
+								if(DEBUG) {System.err.println("Creating node "+jumpNode);}
+								for(Pair<Constant, String> branch : jumpNode.branchTargets()) {
+									Integer target = labelIndexes.get(branch.second());
+									CFGNode targetNode;
+									if(target != null) {
+										targetNode = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints, unresolvedTargets));
+									}
+									else {
+										targetNode = new UnresolvedTargetNode(branch.second());
+										unresolvedTargets.add((UnresolvedTargetNode)targetNode);
+									}
+									targetNode.previous.add(jumpNode);								
+									jumpNode.branches.add(new Pair<Constant, CFGNode>(branch.first(), targetNode));
+								}
+								Integer target = labelIndexes.get(jumpNode.defaultTarget());
+								if(target != null) {
+									jumpNode.defaultBranch = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints, unresolvedTargets));
+								}
+								else {
+									jumpNode.defaultBranch = new UnresolvedTargetNode(jumpNode.defaultTarget());
+									unresolvedTargets.add((UnresolvedTargetNode)jumpNode.defaultBranch);
+								}
+								jumpNode.defaultBranch.previous.add(jumpNode);
+								
+								nextNode = jumpNode;
+							}
+							
+							if(node.body.instructions.size() == 0) {
+								return nextNode;
+							}
+							else {
+								node.next = nextNode;
+								nextNode.previous.add(node);
+								return node;
+							}
 						}
-						
-						if(i == processingIndex) {
-							return nextNode;
-						}
-						else {
-							node.next = nextNode;
-							nextNode.previous.add(node);
-							return node;
+						else if(bytecode instanceof Bytecode.Loop) {
+							Bytecode.Loop loopBytecode = (Bytecode.Loop)bytecode;
+							LoopNode loopNode;
+							Integer index = labelIndexes.get(loopBytecode.loopEndLabel());
+							int end = 0;
+							if(index != null) {
+								end = index;
+							}
+							else {
+								end = Integer.MAX_VALUE;
+							}
+							
+							if(bytecode instanceof Bytecode.For){ 
+								loopNode = new ForLoopNode((Bytecode.For)loopBytecode, i, end);
+							}
+							else { 
+								loopNode = new WhileLoopNode((Bytecode.While)loopBytecode, i, end);
+							}
+							
+							if(DEBUG) {System.err.println("Creating node "+loopNode);}
+							
+							alreadyProcessedEntries.put(end, loopNode.endNode);
+							loopEndIndex.put(loopBytecode.loopEndLabel(), loopNode);
+							
+							if(i+1 < entries.size()) {
+								loopNode.body = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, i+1, exitPoints, unresolvedTargets);
+							}
+							else {
+								loopNode.body = new UnresolvedTargetNode(i+1);
+								unresolvedTargets.add((UnresolvedTargetNode)loopNode.body);
+							}
+							loopNode.body.previous.add(loopNode);
+							Integer target = labelIndexes.get(loopNode.loopEndLabel());
+							if(target != null) {
+								target++;
+								if(target < entries.size()) {
+									loopNode.endNode.next = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints, unresolvedTargets);
+								}
+								else {
+									loopNode.endNode.next = new ReturnNode();
+									exitPoints.add((ReturnNode)loopNode.endNode.next);
+								}
+							}
+							else {
+								loopNode.endNode.next = new UnresolvedTargetNode(loopNode.loopEndLabel());
+								unresolvedTargets.add((UnresolvedTargetNode)loopNode.endNode.next);
+							}
+							loopNode.endNode.next.previous.add(loopNode.endNode);
+							
+							if(node.body.instructions.size() == 0) {
+								return loopNode;
+							}
+							else {
+								node.next = loopNode;
+								loopNode.previous.add(node);
+								return node;
+							}
 						}
 					}
-					else if(bytecode instanceof Bytecode.Loop) {
-						Bytecode.Loop loopBytecode = (Bytecode.Loop)bytecode;
-						LoopNode loopNode;
-						if(bytecode instanceof Bytecode.For){ 
-							loopNode = new ForLoopNode((Bytecode.For)loopBytecode, i, labelIndexes.get(loopBytecode.loopEndLabel()));
-						}
-						else { 
-							loopNode = new WhileLoopNode((Bytecode.While)loopBytecode, i, labelIndexes.get(loopBytecode.loopEndLabel()));
-						}
-						
-						if(DEBUG) {System.err.println("Creating node "+loopNode);}
-						
-						alreadyProcessedEntries.put(processingIndex, loopNode.endNode);
-						loopEndIndex.put(loopBytecode.loopEndLabel(), loopNode);
-						
-						loopNode.body = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, i+1, exitPoints);
-						loopNode.body.previous.add(loopNode);
-						loopNode.endNode.next = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, labelIndexes.get(loopNode.loopEndLabel())+1, exitPoints);
-						loopNode.endNode.next.previous.add(loopNode.endNode);
-						
-						if(i == processingIndex) {
-							return loopNode;
-						}
-						else {
-							node.next = loopNode;
-							loopNode.previous.add(node);
-							return node;
-						}
+					else {
+						node.body.instructions.add(bytecode);
+						bytecode.cfgNode = node;
 					}
-				}
-				else {
-					node.body.instructions.add(bytecode);
-					bytecode.cfgNode = node;
 				}
 			}
 			

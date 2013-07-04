@@ -173,7 +173,8 @@ public class Wyil2OpenClBuilder implements Builder {
 			case FILTER_RESULTS_READY:
 				if(loopFilter.wasLoopFiltered()) {
 					Set<ARGenerator.ReturnNode> exits = new HashSet<ARGenerator.ReturnNode>();
-					ARGenerator.CFGNode root = ARGenerator.processEntries(loopFilter.getFilteredEntries(), exits);
+					Set<ARGenerator.UnresolvedTargetNode> unresolvedTargets = new HashSet<ARGenerator.UnresolvedTargetNode>();
+					ARGenerator.CFGNode root = ARGenerator.processEntries(loopFilter.getFilteredEntries(), exits, unresolvedTargets);
 					writeOpenCLKernel(loopFilter.getFilteredEntries(), loopFilter.getKernelArguments(), declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
 				}
 				break;
