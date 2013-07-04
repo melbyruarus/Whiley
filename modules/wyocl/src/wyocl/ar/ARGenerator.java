@@ -24,10 +24,9 @@ import wyocl.ar.utils.TopologicalSorter.DAGSortNode;
 public class ARGenerator {
 	private static boolean DEBUG = false;
 	
-	public static abstract class RegisterNode {
-		public Set<RegisterNode> previous = new HashSet<RegisterNode>();
-		public RegisterNode next;
-		public Bytecode modifiedBytecode;
+	public static abstract class DFGNode {
+		public Set<DFGNode> lastModified = new HashSet<DFGNode>();
+		public Bytecode bytecode;
 		public int register;
 		public Type type;
 	}
@@ -36,7 +35,7 @@ public class ARGenerator {
 		public Set<CFGNode> previous = new HashSet<CFGNode>();
 		public int identifier;
 
-		public abstract Set<CFGNode> getNextNodes();
+		public abstract void getNextNodes(Set<CFGNode> nodes);
 		
 		@Override
 		public String toString() {
@@ -60,7 +59,9 @@ public class ARGenerator {
 			pw.print("} next:{");
 			
 			sep = "";
-			for(CFGNode n : this.getNextNodes()) {
+			Set<CFGNode> nodes = new HashSet<CFGNode>();
+			this.getNextNodes(nodes);
+			for(CFGNode n : nodes) {
 				if(n != null) {
 					pw.print(sep);
 					pw.print(n.identifier);
@@ -73,9 +74,12 @@ public class ARGenerator {
 			return sw.toString();
 		}
 		
+		@SuppressWarnings("unchecked")
 		@Override
 		public Collection<DAGSortNode> getNextNodesForSorting() {
-			return new HashSet<DAGSortNode>(this.getNextNodes());
+			Set<CFGNode> nodes = new HashSet<CFGNode>();
+			this.getNextNodes(nodes);
+			return (Set<DAGSortNode>)((Object)nodes);
 		}
 	}
 	
@@ -84,10 +88,8 @@ public class ARGenerator {
 		public CFGNode next;
 		
 		@Override
-		public Set<CFGNode> getNextNodes() {
-			Set<CFGNode> following = new HashSet<CFGNode>();
-			following.add(next);
-			return following;
+		public void getNextNodes(Set<CFGNode> nodes) {
+			nodes.add(next);
 		}
 	}
 		
@@ -111,10 +113,8 @@ public class ARGenerator {
 		}
 		
 		@Override
-		public Set<CFGNode> getNextNodes() {
-			Set<CFGNode> following = new HashSet<CFGNode>();
-			following.add(body);
-			return following;
+		public void getNextNodes(Set<CFGNode> nodes) {
+			nodes.add(body);
 		}
 	}
 	
@@ -138,10 +138,8 @@ public class ARGenerator {
 		LoopBreakNode(LoopNode loop) {this.loop = loop;}
 		
 		@Override
-		public Set<CFGNode> getNextNodes() {
-			Set<CFGNode> following = new HashSet<CFGNode>();
-			following.add(next);
-			return following;
+		public void getNextNodes(Set<CFGNode> nodes) {
+			nodes.add(next);
 		}
 	}
 	
@@ -153,10 +151,8 @@ public class ARGenerator {
 		LoopEndNode(LoopNode loop) {this.loop = loop;}
 		
 		@Override
-		public Set<CFGNode> getNextNodes() {
-			Set<CFGNode> following = new HashSet<CFGNode>();
-			following.add(next);
-			return following;
+		public void getNextNodes(Set<CFGNode> nodes) {
+			nodes.add(next);
 		}
 	}
 	
@@ -184,13 +180,11 @@ public class ARGenerator {
 		}
 		
 		@Override
-		public Set<CFGNode> getNextNodes() {
-			Set<CFGNode> following = new HashSet<CFGNode>();
-			following.add(defaultBranch);
+		public void getNextNodes(Set<CFGNode> nodes) {
+			nodes.add(defaultBranch);
 			for(Pair<Constant, CFGNode> p : branches) {
-				following.add(p.second());
+				nodes.add(p.second());
 			}
-			return following;
 		}
 	}
 	
@@ -213,18 +207,15 @@ public class ARGenerator {
 		}
 		
 		@Override
-		public Set<CFGNode> getNextNodes() {
-			Set<CFGNode> following = new HashSet<CFGNode>();
-			following.add(conditionMet);
-			following.add(conditionUnmet);
-			return following;
+		public void getNextNodes(Set<CFGNode> nodes) {
+			nodes.add(conditionMet);
+			nodes.add(conditionUnmet);
 		}
 	}
 	
 	public static class ReturnNode extends CFGNode {
 		@Override
-		public Set<CFGNode> getNextNodes() {
-			return new HashSet<CFGNode>();
+		public void getNextNodes(Set<CFGNode> nodes) {
 		}
 	}
 	
@@ -245,7 +236,9 @@ public class ARGenerator {
 	private static int populateIdentifiers(CFGNode node, int id) {
 		node.identifier = id;
 		id++;
-		for(CFGNode n : node.getNextNodes()) {
+		Set<CFGNode> nodes = new HashSet<CFGNode>();
+		node.getNextNodes(nodes);
+		for(CFGNode n : nodes) {
 			id = populateIdentifiers(n, id);
 		}
 		return id;
@@ -390,6 +383,7 @@ public class ARGenerator {
 				}
 				else {
 					node.body.instructions.add(bytecode);
+					bytecode.cfgNode = node;
 				}
 			}
 			

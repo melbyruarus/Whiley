@@ -24,7 +24,9 @@ public class ARPrinter {
 		if(node != null) {
 			nodes.add(node);
 			
-			for(CFGNode n : node.getNextNodes()) {
+			Set<CFGNode> subnodes = new HashSet<CFGNode>();
+			node.getNextNodes(subnodes);
+			for(CFGNode n : subnodes) {
 				recursivlyAdd(n, nodes);
 			}
 		}

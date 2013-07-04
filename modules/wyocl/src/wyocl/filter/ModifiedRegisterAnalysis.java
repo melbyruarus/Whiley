@@ -98,9 +98,6 @@ public class ModifiedRegisterAnalysis {
 		else if(assignable instanceof Code.AbstractSplitNaryAssignable) {
 			return ((Code.AbstractSplitNaryAssignable<Type>) assignable).type;
 		}
-		else if(assignable instanceof Code.AbstractSplitNaryAssignable) {
-			return ((Code.AbstractSplitNaryAssignable<Type>) assignable).type;
-		}
 		else if(assignable instanceof Code.Const) {
 			return ((Code.Const) assignable).constant.type();
 		}

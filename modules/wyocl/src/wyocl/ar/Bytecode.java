@@ -1,7 +1,9 @@
 package wyocl.ar;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
@@ -9,14 +11,50 @@ import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 import wybs.util.Pair;
 import wyil.lang.Code;
 import wyil.lang.Constant;
+import wyil.lang.Type;
+import wyil.lang.Type.EffectiveCollection;
+import wyil.lang.Type.EffectiveTuple;
 import wyocl.ar.ARGenerator.CFGNode;
-import wyocl.ar.ARGenerator.RegisterNode;
+import wyocl.ar.ARGenerator.DFGNode;
 
 public abstract class Bytecode {
-	public Set<RegisterNode> modifiedRegisters = new HashSet<RegisterNode>();
-	public Set<RegisterNode> registersDependedUpon = new HashSet<RegisterNode>();
 	public CFGNode cfgNode;
+	public final Map<Integer, DFGNode> writtenDFGNodes = new HashMap<Integer, DFGNode>();
+	public final Map<Integer, DFGNode> readDFGNodes = new HashMap<Integer, DFGNode>();
 	
+	public static class TypeDescription {
+		private final RootType rootType;
+		private final Object type;
+		
+		enum RootType {
+			TYPE,
+			EFFECTIVE_COLLECTION,
+			EFFECTIVE_TUPLE
+		}
+		
+		public TypeDescription(Type type) {this.type = type; rootType = RootType.TYPE;}
+		public TypeDescription(EffectiveCollection type) {this.type = type; rootType = RootType.EFFECTIVE_COLLECTION;}
+		public TypeDescription(EffectiveTuple type) {this.type = type; rootType = RootType.EFFECTIVE_TUPLE;}
+		
+		public Type getType() {
+			return (Type)type;
+		}
+		
+		public EffectiveCollection getEffectiveCollection() {
+			return (EffectiveCollection)type;
+		}
+		
+		public EffectiveTuple getEffectiveTuple() {
+			return (EffectiveTuple)type;
+		}
+		
+		public RootType getRootType() {
+			return rootType;
+		}
+	}
+	
+	public abstract void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters);
+		
 	public static interface Data {
 	}
 	
@@ -38,60 +76,124 @@ public abstract class Bytecode {
 		private final Code.UnArithOp code;
 		
 		public Unary(Code.UnArithOp code) { this.code = code; }
+
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.type)));
+			readRegisters.add(code.operand);
+		}
 	}
 	
 	public static class Binary extends Bytecode implements Bytecode.Data {
 		private final Code.BinArithOp code;
 		
 		public Binary(Code.BinArithOp code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.type)));
+			readRegisters.add(code.leftOperand);
+			readRegisters.add(code.rightOperand);
+		}
 	}
 	
 	public static class ConstLoad extends Bytecode implements Bytecode.Data {
 		private final Code.Const code;
 		
 		public ConstLoad(Code.Const code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.constant.type())));
+		}
 	}
 	
 	public static class Assign extends Bytecode implements Bytecode.Data {
 		private final Code.Assign code;
 		
 		public Assign(Code.Assign code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.type)));
+			readRegisters.add(code.operand);
+		}
 	}
 	
 	public static class Move extends Bytecode implements Bytecode.Data {
 		private final Code.Move code;
 		
 		public Move(Code.Move code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.type)));
+			readRegisters.add(code.operand);
+		}
 	}
 	
 	public static class Convert extends Bytecode implements Bytecode.Data {
 		private final Code.Convert code;
 		
 		public Convert(Code.Convert code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.type)));
+			readRegisters.add(code.operand);
+		}
 	}
 	
 	public static class Load extends Bytecode implements Bytecode.Data {
 		private final Code.IndexOf code;
 		
 		public Load(Code.IndexOf code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.type)));
+			readRegisters.add(code.leftOperand);
+			readRegisters.add(code.rightOperand);
+		}
 	}
 	
 	public static class LengthOf extends Bytecode implements Bytecode.Data {
 		private final Code.LengthOf code;
 		
 		public LengthOf(Code.LengthOf code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.type)));
+			readRegisters.add(code.operand);
+		}
 	}
 	
 	public static class TupleLoad extends Bytecode implements Bytecode.Data {
 		private final Code.TupleLoad code;
 		
 		public TupleLoad(Code.TupleLoad code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.type)));
+			readRegisters.add(code.operand);
+		}
 	}
 	
 	public static class Update extends Bytecode implements Bytecode.Data {
 		private final Code.Update code;
 		
 		public Update(Code.Update code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.type)));
+			readRegisters.add(code.operand);
+			for(int i : code.operands) {
+				readRegisters.add(i);
+			}
+		}
 	}
 	
 	public static class For extends Bytecode implements Bytecode.Loop {
@@ -102,6 +204,12 @@ public abstract class Bytecode {
 		@Override
 		public String loopEndLabel() {
 			return code.target;
+		}
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.indexOperand, new TypeDescription(code.type)));
+			readRegisters.add(code.sourceOperand);
 		}
 	}
 	
@@ -114,6 +222,10 @@ public abstract class Bytecode {
 		public String loopEndLabel() {
 			return code.target;
 		}
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+		}
 	}
 	
 	public static class UnconditionalJump extends Bytecode implements Bytecode.Jump {
@@ -124,6 +236,10 @@ public abstract class Bytecode {
 		public String target() {
 			return code.target;
 		}
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+		}
 	}
 	
 	public static class ConditionalJump extends Bytecode implements Bytecode.Jump {
@@ -133,6 +249,12 @@ public abstract class Bytecode {
 
 		public String conditionMetTarget() {
 			return code.target;
+		}
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			readRegisters.add(code.leftOperand);
+			readRegisters.add(code.rightOperand);
 		}
 	}
 	
@@ -148,6 +270,11 @@ public abstract class Bytecode {
 		public String defaultTarget() {
 			return code.defaultTarget;
 		}
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			readRegisters.add(code.operand);
+		}
 	}
 	
 	public static class Label extends Bytecode implements Bytecode.Control, Bytecode.Target {
@@ -158,6 +285,10 @@ public abstract class Bytecode {
 		@Override
 		public String name() {
 			return code.label;
+		}
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
 		}
 	}
 	
@@ -170,18 +301,37 @@ public abstract class Bytecode {
 		public String name() {
 			return code.label;
 		}
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+		}
 	}
 	
 	public static class Return extends Bytecode implements Bytecode.Jump {
 		private final Code.Return code;
 		
 		public Return(Code.Return code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			if(code.type != Type.T_VOID) {
+				readRegisters.add(code.operand);
+			}
+		}
 	}
 	
 	public static class Invoke extends Bytecode {
 		private final Code.Invoke code;
 		
 		public Invoke(Code.Invoke code) { this.code = code; }
+		
+		@Override
+		public void getRegisterSummary(Set<Pair<Integer, TypeDescription>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, TypeDescription>(code.target, new TypeDescription(code.type.ret())));
+			for(int i : code.operands) {
+				readRegisters.add(i);
+			}
+		}
 	}
 	
 	public static Bytecode bytecodeForCode(Code code) {
