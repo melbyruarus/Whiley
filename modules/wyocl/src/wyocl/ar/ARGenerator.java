@@ -288,7 +288,6 @@ public class ARGenerator {
 		
 		int index = 0;
 		for(Entry e : entries) {
-			System.err.println(e.code);
 			if(e.code instanceof Code.Label) {
 				Code.Label l = (Code.Label)e.code;
 				map.put(l.label, index);
