@@ -43,7 +43,7 @@ import wyil.lang.Block;
 import wyil.lang.Code;
 import wyil.lang.Type;
 import wyil.lang.WyilFile;
-import wyocl.ar.ARGenerator;
+import wyocl.ar.CFGGenerator;
 import wyocl.ar.CFGNode;
 import wyocl.filter.Argument;
 import wyocl.filter.LoopFilter;
@@ -175,7 +175,7 @@ public class Wyil2OpenClBuilder implements Builder {
 				if(loopFilter.wasLoopFiltered()) {
 					Set<CFGNode.ReturnNode> exits = new HashSet<CFGNode.ReturnNode>();
 					Set<CFGNode.UnresolvedTargetNode> unresolvedTargets = new HashSet<CFGNode.UnresolvedTargetNode>();
-					CFGNode root = ARGenerator.processEntries(loopFilter.getFilteredEntries(), exits, unresolvedTargets);
+					CFGNode root = CFGGenerator.processEntries(loopFilter.getFilteredEntries(), exits, unresolvedTargets);
 					writeOpenCLKernel(loopFilter.getFilteredEntries(), loopFilter.getKernelArguments(), declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
 				}
 				break;

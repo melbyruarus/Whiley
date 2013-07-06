@@ -14,18 +14,10 @@ import wybs.util.Pair;
 import wyil.lang.Block.Entry;
 import wyil.lang.Code;
 import wyil.lang.Constant;
-import wyil.lang.Type;
 import wyocl.ar.utils.NotADAGException;
 
-public class ARGenerator {
+public class CFGGenerator {
 	private static boolean DEBUG = false;
-	
-	public static abstract class DFGNode {
-		public Set<DFGNode> lastModified = new HashSet<DFGNode>();
-		public Bytecode bytecode;
-		public int register;
-		public Type type;
-	}
 	
 	public static CFGNode processEntries(List<Entry> entries, Set<CFGNode.ReturnNode> exitPoints, Set<CFGNode.UnresolvedTargetNode> unresolvedTargets) {
 		CFGNode rootNode = recursivlyConstructRoughCFG(entries, indexLabels(entries), new HashMap<Integer, CFGNode>(), new HashMap<String, CFGNode.LoopNode>(), 0, exitPoints, unresolvedTargets);
@@ -45,7 +37,7 @@ public class ARGenerator {
 		node.identifier = id;
 		id++;
 		Set<CFGNode> nodes = new HashSet<CFGNode>();
-		node.getNextNodes(nodes);
+		node.getFlowNextNodes(nodes);
 		for(CFGNode n : nodes) {
 			id = populateIdentifiers(n, id);
 		}
