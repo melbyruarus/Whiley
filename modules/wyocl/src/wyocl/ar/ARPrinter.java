@@ -4,7 +4,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import wyocl.ar.ARGenerator.CFGNode;
 import wyocl.ar.utils.NotADAGException;
 import wyocl.ar.utils.TopologicalSorter;
 

@@ -11,7 +11,6 @@ import wyil.lang.Constant;
 import wyil.lang.Type;
 import wyil.lang.Type.EffectiveCollection;
 import wyil.lang.Type.EffectiveTuple;
-import wyocl.ar.ARGenerator.CFGNode;
 import wyocl.ar.ARGenerator.DFGNode;
 
 public abstract class Bytecode {

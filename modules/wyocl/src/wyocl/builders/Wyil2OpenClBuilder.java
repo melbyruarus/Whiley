@@ -44,6 +44,7 @@ import wyil.lang.Code;
 import wyil.lang.Type;
 import wyil.lang.WyilFile;
 import wyocl.ar.ARGenerator;
+import wyocl.ar.CFGNode;
 import wyocl.filter.Argument;
 import wyocl.filter.LoopFilter;
 import wyocl.lang.ClFile;
@@ -172,9 +173,9 @@ public class Wyil2OpenClBuilder implements Builder {
 				break;
 			case FILTER_RESULTS_READY:
 				if(loopFilter.wasLoopFiltered()) {
-					Set<ARGenerator.ReturnNode> exits = new HashSet<ARGenerator.ReturnNode>();
-					Set<ARGenerator.UnresolvedTargetNode> unresolvedTargets = new HashSet<ARGenerator.UnresolvedTargetNode>();
-					ARGenerator.CFGNode root = ARGenerator.processEntries(loopFilter.getFilteredEntries(), exits, unresolvedTargets);
+					Set<CFGNode.ReturnNode> exits = new HashSet<CFGNode.ReturnNode>();
+					Set<CFGNode.UnresolvedTargetNode> unresolvedTargets = new HashSet<CFGNode.UnresolvedTargetNode>();
+					CFGNode root = ARGenerator.processEntries(loopFilter.getFilteredEntries(), exits, unresolvedTargets);
 					writeOpenCLKernel(loopFilter.getFilteredEntries(), loopFilter.getKernelArguments(), declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
 				}
 				break;
