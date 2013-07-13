@@ -36,6 +36,15 @@ public class Wyil2JavaBuilder extends wyjc.Wyil2JavaBuilder {
 		loopFilter = null;
 		return result;
 	}
+	
+	protected ClassFile.Method build(int caseNum, WyilFile.Case mcase,
+			WyilFile.MethodDeclaration method, HashMap<JvmConstant,Integer> constants) {
+		loopFilter.beginMethod(method);
+		ClassFile.Method ret = super.build(caseNum, mcase, method, constants);
+		loopFilter.endMethod();
+		return ret;
+	}
+	
 	public void translate(Block blk, int freeSlot,
 			HashMap<JvmConstant, Integer> constants,
 			ArrayList<Handler> handlers,

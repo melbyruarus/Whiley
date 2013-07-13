@@ -7,6 +7,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Stack;
 
 import wybs.lang.NameID;
 import wybs.lang.Path.ID;
@@ -15,8 +18,24 @@ import wyil.lang.Block;
 import wyil.lang.Code;
 import wyil.lang.Constant;
 import wyil.lang.Type;
+import wyil.lang.WyilFile;
+import wyocl.ar.ARPrinter;
+import wyocl.ar.Bytecode;
+import wyocl.ar.CFGGenerator;
+import wyocl.ar.CFGNode;
+import wyocl.ar.DFGGenerator;
+import wyocl.ar.CFGNode.ForLoopNode;
+import wyocl.ar.CFGNode.UnresolvedTargetNode;
+import wyocl.ar.CFGNode.VanillaCFGNode;
+import wyocl.ar.DFGNode;
+import wyocl.ar.utils.CFGIterator;
+import wyocl.ar.utils.CFGIterator.CFGNodeCallback;
+import wyocl.ar.utils.CFGIterator.Entry;
+import wyocl.ar.utils.NotADAGException;
 
 public class LoopFilter {
+	private static final boolean DEBUG = false;
+	
 	/**
 	 * The endLabel is used to determine when we're within a for loop being
 	 * translated in OpenCL. If this is <code>null</code> then we're *not*
@@ -28,13 +47,6 @@ public class LoopFilter {
 	 * being filtered.
 	 */
 	private final String modulePath;
-	/**
-	 * A list of entries which have been filtered out and are awaiting processing
-	 */
-	private ArrayList<Block.Entry> filteredEntries;
-	private ArrayList<Block.Entry> replacementEntries;
-	private ArrayList<Argument> kernelArguments;
-	private int indexRegister;
 	
 	private ArrayList<Type> executeGPUCodeFunctionArgumentTypes = new ArrayList<Type>() {
 		private static final long serialVersionUID = 1L;
@@ -48,6 +60,72 @@ public class LoopFilter {
 	private NameID executeGPUCodeFunctionPath = new NameID(Trie.fromString("whiley/gpgpu/Util"), "executeWYGPUKernel");
 	
 	private Block currentBlock;
+	private boolean skipCurrentBlock;
+	private CFGNode currentBlocksCFG;
+	private Map<Code, LoopDescription> currentBlocksLoops;
+	private List<Entry> currentBlocksSortedCFG;
+	
+	private LoopDescription currentLoop;
+	
+	private List<Block.Entry> replacementEntries;
+	private List<Argument> kernelArguments;
+	private Map<Integer, DFGNode> methodArgumentsDFGNodes;
+	
+	private static class LoopDescription {
+		private LoopType type;
+		private final ForLoopNode loopNode;
+		private final List<CFGIterator.Entry> nestedEntries;
+		private boolean bytecodesGPUCombatable = false;
+		private boolean breaksGPUCombatable = false;
+		private boolean dataDependanciesGPUCombatable = false;
+		private boolean earlyReturnCompatable = false;
+		private boolean typesCompatable = false;
+
+		public LoopDescription(ForLoopNode loopNode, List<Entry> nestedEntries) {
+			this.loopNode = loopNode;
+			this.nestedEntries = nestedEntries;
+		}
+		
+		public LoopType getType() {
+			return type;
+		}
+
+		public ForLoopNode getCFGNode() {
+			return loopNode;
+		}
+
+		public void setBytecodesGPUCombatable(boolean b) {
+			bytecodesGPUCombatable = b;
+		}
+
+		public void setBreaksGPUCombatable(boolean b) {
+			breaksGPUCombatable = b;
+		}
+
+		public void setDataDependanciesCombatable(boolean b) {
+			dataDependanciesGPUCombatable = b;
+		}
+		
+		public boolean getLoopCombatability() {
+			return bytecodesGPUCombatable && breaksGPUCombatable && dataDependanciesGPUCombatable && earlyReturnCompatable && typesCompatable;
+		}
+		
+		public List<CFGIterator.Entry> getNestedEntries() {
+			return nestedEntries;
+		}
+
+		public void setType(LoopType type) {
+			this.type = type;
+		}
+
+		public void setEarlyReturnCombatable(boolean b) {
+			earlyReturnCompatable = b;
+		}
+
+		public void setTypesCombatable(boolean b) {
+			typesCompatable  = b;
+		}
+	}
 	
 	public LoopFilter(ID id) {
 		modulePath = id.toString();
@@ -55,12 +133,12 @@ public class LoopFilter {
 
 	public FilterAction filter(Block.Entry entry) {
 		if(currentBlock == null) {
-			throw new InternalError("beginBlock() be be called before filter()");
+			throw new InternalError("beginBlock() must be called before filter()");
 		}
 		
-		// TODO: we're going to have to do something like store all byte codes for the scope
-		// so that we can determine what dependancies the loop has and what arguments it is
-		// going to need
+		if(skipCurrentBlock) {
+			return FilterAction.DEFAULT;
+		}
 		
 		// TODO: we're going to need the last free register
 		
@@ -69,11 +147,21 @@ public class LoopFilter {
 		if(endLabel == null) {
 			if(code instanceof Code.ForAll) {
 				Code.ForAll forall = (Code.ForAll)code;
-				endLabel = forall.target;
-				filteredEntries = new ArrayList<Block.Entry>();
-				filteredEntries.add(entry);
 				
-				return FilterAction.SKIP;
+				LoopDescription description = currentBlocksLoops.get(forall);
+				if(description == null) {
+					throw new InternalError("Unable to find loop description for: " + forall);
+				}
+				
+				if(description.getType() == LoopType.GPU_IMPLICIT) {
+					endLabel = forall.target;
+					currentLoop = description;
+					
+					return FilterAction.SKIP;
+				}
+				else {
+					return FilterAction.DEFAULT;
+				}
 			}
 			else {
 				return FilterAction.DEFAULT;
@@ -83,57 +171,40 @@ public class LoopFilter {
 			if(code instanceof Code.Label) {
 				Code.Label label = (Code.Label)code;
 				if(label.label.equals(endLabel)) {
-					filteredEntries.add(entry);
 					endLabel = null;
 					
-					processFilteredBytecodes();
+					produceReplacementEntries();
 					
 					return FilterAction.FILTER_RESULTS_READY;
 				}
 			}
-			
-			filteredEntries.add(entry);
-			
+						
 			return FilterAction.SKIP;
 		}
 	}
 
-	/**
-	 * This method goes through the contents of filteredEntries once the loop
-	 * has been finished, and determines what entries should be filtered out
-	 * for OpenCL, which entries should be left intact, and what entries should
-	 * be added if any.
-	 * 
-	 * This method outputs the entries which should stay in the source or be added
-	 * to replacementEntries, and the entries which have been filtered out will be
-	 * stored in filteredEntries (this includes the loop start and end label).
-	 */
-	private void processFilteredBytecodes() {
-		// TODO: determine if the loop can be parallalized, and if there
-		// are nested loops figure out which level of the loop should be
-		// parallalized
-		
+	private void produceReplacementEntries() {
 		replacementEntries = new ArrayList<Block.Entry>();
 		
-		Code.ForAll forAll = (Code.ForAll)filteredEntries.get(0).code;
+		Bytecode.For forAll = currentLoop.getCFGNode().getBytecode();
 		// TODO: Check source isn't modified?
 		
 		kernelArguments = new ArrayList<Argument>();
-		checkLoopForGPGPUCompatability(kernelArguments);
+		determineKernelArguments(kernelArguments);
 		// Remove possible duplication of the kernel argument
 		Iterator<Argument> it = kernelArguments.iterator();
 		while(it.hasNext()) {
 			Argument arg = it.next();
-			if(arg.register == forAll.sourceOperand) {
+			if(arg.register == forAll.getSourceRegister()) {
 				if(!arg.readonly) {
 					// FIXME: re-add this check when read-only primitive types are supported by runtime (see ref:2123sdsds)
-					//throw new RuntimeException("GPU cannot loop over an array that is being simultaniously updated");
+					//throw new RuntimeException("GPU cannot loop over an array that is being simultaneously updated");
 				}
 				it.remove();
 			}
 		}
 		Collections.sort(kernelArguments);
-		kernelArguments.add(0, new Argument(forAll.type, forAll.sourceOperand));
+		kernelArguments.add(0, new Argument(forAll.getSourceType(), forAll.getSourceRegister()));
 				
 		ArrayList<Integer> argumentRegisters = new ArrayList<Integer>();
 		for(Argument arg : kernelArguments) {
@@ -141,21 +212,10 @@ public class LoopFilter {
 		}
 		
 		// TODO: actually output marshaling and unmarshaling code here? Avoids cost of function call, wrapping/unwrapping multiple times and type tests
-		
-		setIndexRegister(forAll.indexOperand);
-		
-		// TODO: now we need to see which of these registers are read/written
-		// or reused (written to before being read)
-		
-		// TODO: figure out the dependencies between loops
-				
-		// TODO: we're going to have to adjust all the registers used in the stored code
-		// We could do that by just always +1 when calling filter for the first time - is there a limit to the number of registers?
-		// Does this introduce problems?
-				
-		final int temporaryListRegister = 100; // FIXME: don't hard code target
-		final int temporaryCounterRegister = 101; // FIXME: don't hard code
-		final int temporaryModuleNameRegister = 102; // FIXME: don't hard code
+			
+		final int temporaryListRegister = 1000; // FIXME: don't hard code target
+		final int temporaryCounterRegister = 1001; // FIXME: don't hard code
+		final int temporaryModuleNameRegister = 1002; // FIXME: don't hard code
 		
 		replacementEntries.add(new Block.Entry(Code.NewList(Type.List(Type.T_ANY, false), temporaryListRegister, argumentRegisters)));
 		replacementEntries.add(new Block.Entry(Code.Const(temporaryModuleNameRegister, Constant.V_STRING(modulePath))));
@@ -172,86 +232,71 @@ public class LoopFilter {
 		}
 	}
 	
-	private boolean checkLoopForGPGPUCompatability(List<Argument> arguments) {
-		boolean startedLoop = false;
-		boolean finishedLoop = false;
+	private void determineKernelArguments(List<Argument> arguments) {
+		CFGNode.ForLoopNode loop = currentLoop.getCFGNode();
 		
-		HashSet<Integer> possibleInputs = new HashSet<Integer>();
-		HashSet<Integer> possibleOutputs = new HashSet<Integer>();
-		HashSet<Integer> readRegistersInLoop = new HashSet<Integer>();
-		HashSet<Integer> writtenRegistersInLoop = new HashSet<Integer>();
-		HashSet<Integer> writtenRegistersAfterLoop = new HashSet<Integer>();
+		final Set<DFGNode> dfgNodesInLoop = new HashSet<DFGNode>();
 		
-		HashMap<Integer, Type> typesAtStartOfLoop = new HashMap<Integer, Type>();
-		HashMap<Integer, Type> typesAtEndOfLoop = new HashMap<Integer, Type>();
-				
-		for(Block.Entry e : currentBlock) {
-			Code code = e.code;
-						
-			if(!startedLoop) { // Before loop
-				if(e.equals(filteredEntries.get(0))) {
-					startedLoop = true;
-					continue;
-				}
-				
-				HashSet<Integer> written = new HashSet<Integer>();
-				ModifiedRegisterAnalysis.getModifiedRegisters(code, null, written);
-				ModifiedRegisterAnalysis.getAssignedType(code, typesAtStartOfLoop);
-				possibleInputs.addAll(written);
-				possibleOutputs.addAll(written);
+		Set<CFGNode> endNodes = new HashSet<CFGNode>();
+		endNodes.add(loop.endNode);
+		endNodes.addAll(currentLoop.getCFGNode().breakNodes);
+		CFGIterator.iterateCFGForwards(new CFGIterator.CFGNodeCallback() {
+			@Override
+			public boolean process(CFGNode node) {
+				node.gatherDFGNodesInto(dfgNodesInLoop);
+				return true;
 			}
-			else if(!finishedLoop) { // Inside loop
-				if(e.equals(filteredEntries.get(filteredEntries.size()-1))) {
-					finishedLoop = true;
-					continue;
-				}
-				
-				HashSet<Integer> read = new HashSet<Integer>();
-				HashSet<Integer> written = new HashSet<Integer>();
-				ModifiedRegisterAnalysis.getModifiedRegisters(code, read, written);
-				ModifiedRegisterAnalysis.getAssignedType(code, typesAtEndOfLoop);
-				// This code must occur before writtenRegistersInLoop.add(...)
-				for(int reg : read) {
-					if(!writtenRegistersInLoop.contains(reg)) {
-						readRegistersInLoop.add(reg);
-					}
-				}
-				writtenRegistersInLoop.addAll(written);
+		}, loop.body, endNodes);
+		
+		Set<DFGNode> dfgNodesProvidedToKernel = new HashSet<DFGNode>();
+		dfgNodesProvidedToKernel.addAll(dfgNodesInLoop);
+		dfgNodesProvidedToKernel.add(loop.getBytecode().getIndexDFGNode());
+		dfgNodesProvidedToKernel.addAll(loop.getBytecode().getSourceDFGNode().lastModified);
+		
+		Map<Integer, Type> endTypes = new HashMap<Integer, Type>();
+		
+		for(CFGNode endNode : endNodes) {
+			for(Map.Entry<Integer, DFGGenerator.DFGInfo> entry : endNode.getEndRegisterInfo().writeInfo.registerMapping.entrySet()) {
+				endTypes.put(entry.getKey(), DFGGenerator.mergeTypes(endTypes.get(entry.getKey()), entry.getValue().type));
 			}
-			else { // After loop
-				HashSet<Integer> read = new HashSet<Integer>();
-				HashSet<Integer> written = new HashSet<Integer>();
-				ModifiedRegisterAnalysis.getModifiedRegisters(code, read, written);
-				// This code must occur before writtenRegistersInLoop.add(...)
-				for(int reg : read) {
-					if(!writtenRegistersAfterLoop.contains(reg)) {
-						possibleOutputs.add(reg);
-					}
-				}
-				writtenRegistersAfterLoop.addAll(written);
-			}
-			
-			// TODO: check for data dependencies
 		}
 		
-		// Compute inputs and outputs
-		HashSet<Integer> outputs = new HashSet<Integer>(writtenRegistersInLoop);
-		outputs.retainAll(possibleOutputs);
-		HashSet<Integer> inputs = new HashSet<Integer>(readRegistersInLoop);
-		inputs.retainAll(possibleInputs);
+		Map<Integer, Type> inputs = new HashMap<Integer, Type>();
+		Map<Integer, Type> outputs = new HashMap<Integer, Type>();
+		
+		for(DFGNode n : dfgNodesInLoop) {			
+			if(!n.isAssignment) {
+				for(DFGNode lastModified : n.lastModified) {
+					if(!dfgNodesProvidedToKernel.contains(lastModified)) {					
+						inputs.put(lastModified.register, DFGGenerator.mergeTypes(lastModified.type, inputs.get(lastModified.register)));
+					}
+				}
+			}
+			for(DFGNode nextRead : n.nextRead) {
+				if(!dfgNodesInLoop.contains(nextRead)) {					
+					outputs.put(nextRead.register, DFGGenerator.mergeTypes(nextRead.type, outputs.get(nextRead.register)));
+				}
+			}
+		}
 		
 		// Compile argument set
-		HashMap<Integer, Argument> dependancies = new HashMap<Integer, Argument>();
+		Map<Integer, Argument> dependancies = new HashMap<Integer, Argument>();
 		
-		for(int reg : inputs) {
-			dependancies.put(reg, new Argument(typesAtStartOfLoop.get(reg), reg));
+		for(Map.Entry<Integer, Type> entry : inputs.entrySet()) {
+			int register = entry.getKey();
+			Type type = entry.getValue();
+			
+			dependancies.put(register, new Argument(type, register));
 		}
-		for(int reg : outputs) {
-			Argument arg = dependancies.get(reg);
+		for(Map.Entry<Integer, Type> entry : outputs.entrySet()) {
+			int register = entry.getKey();
+			Type type = entry.getValue();
+			
+			Argument arg = dependancies.get(register);
 			
 			if(arg == null) {
-				arg = new Argument(typesAtEndOfLoop.get(reg), reg);
-				dependancies.put(reg, arg);
+				arg = new Argument(type, register);
+				dependancies.put(register, arg);
 			}
 			
 			arg.setReadonly(false);
@@ -264,49 +309,330 @@ public class LoopFilter {
 		for (Argument arg : arguments) {
 			arg.setReadonly(false);
 		}
-			
-		return true;
-	}
-
-	/**
-	 * Get the list of entries which should be put into the place of the
-	 * entries which have been filtered out.
-	 * 
-	 * NOTE: make sure to avoid the possibility of the filter being re-run
-	 * on the output of this function. So if you loop over the contents of
-	 * this array make sure the function that processes the entries does not call
-	 * any filters.
-	 * 
-	 * @return
-	 */
-	public List<Block.Entry> getReplacementEntries() {
-		return replacementEntries;
-	}
-	
-	public List<Block.Entry> getFilteredEntries() {
-		return filteredEntries;
-	}
-	
-	public boolean wasLoopFiltered() {
-		return filteredEntries.size() > 0;
 	}
 
 	public void beginBlock(Block blk) {
+		if(methodArgumentsDFGNodes == null) {
+			throw new InternalError("beginMethod() must be called before beginBlock()");
+		}
+		
 		currentBlock = blk;
+		currentBlocksLoops = new HashMap<Code, LoopDescription>();
+		
+		List<Block.Entry> entries = new ArrayList<Block.Entry>(); // TODO: method of actually getting this?
+		for(Block.Entry be : blk) {
+			entries.add(be);
+		}
+		
+		Set<CFGNode.ReturnNode> exitPoints = new HashSet<CFGNode.ReturnNode>();
+		Set<UnresolvedTargetNode> unresolvedTargets = new HashSet<CFGNode.UnresolvedTargetNode>();
+		currentBlocksCFG = CFGGenerator.processEntries(entries, exitPoints, unresolvedTargets);
+		if(DEBUG) {
+			try {
+				System.err.println("------------ Begin CFG Printing (1/2) ------------");
+				ARPrinter.print(currentBlocksCFG);
+				System.err.println("------------- End CFG Printing (1/2) -------------");
+			} catch (NotADAGException e1) {
+				e1.printStackTrace();
+			}
+		}
+		DFGGenerator.populateDFG(currentBlocksCFG, methodArgumentsDFGNodes);
+		if(DEBUG) {
+			try {
+				System.err.println("------------ Begin CFG Printing (2/2) ------------");
+				ARPrinter.print(currentBlocksCFG);
+				System.err.println("------------- End CFG Printing (2/2) -------------");
+			} catch (NotADAGException e1) {
+				e1.printStackTrace();
+			}
+		}
+		try {
+			currentBlocksSortedCFG = CFGIterator.createNestedRepresentation(currentBlocksCFG);
+			skipCurrentBlock = !preprocessLoops();
+		} catch (NotADAGException e) {
+			skipCurrentBlock = true;
+		}
+	}
+
+	private boolean preprocessLoops() {
+		if(DEBUG) { System.err.println("Preprocess loops"); }
+		
+		CFGIterator.traverseNestedRepresentation(currentBlocksSortedCFG, new CFGIterator.CFGNestedRepresentationVisitor() {
+			@Override
+			public void visitNonNestedNode(CFGNode node) {
+			}
+			
+			@Override
+			public void exitedNestedNode(CFGNode node) {
+			}
+			
+			@Override
+			public void enteredNestedNode(CFGNode node, List<Entry> nestedEntries) {
+				if(node instanceof CFGNode.ForLoopNode) {
+					CFGNode.ForLoopNode loopNode = (CFGNode.ForLoopNode)node;
+					currentBlocksLoops.put(loopNode.getBytecode().getWYILLangBytecode(), new LoopDescription(loopNode, nestedEntries));
+				}
+			}
+		});
+		
+		if(!currentBlocksLoops.isEmpty()) {
+			determineLoopsBytecodeCompatability();
+			determineLoopsBreakCompatability();
+			determineLoopsEarlyReturnCompatability();
+			determineLoopsDataDependancyCompatability();
+			determineLoopsRegisterTypeCompatability();
+			determineLoopsFunctionCallCompatability();
+			determineLoopTypes();
+			
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+
+	private void determineLoopsFunctionCallCompatability() {
+		// FIXME: implement
+	}
+
+	private void determineLoopsRegisterTypeCompatability() {
+		for(final LoopDescription loop : currentBlocksLoops.values()) {
+			loop.setTypesCombatable(true);
+			
+			final Set<DFGNode> nodes = new HashSet<DFGNode>();
+			Set<CFGNode> endNodes = new HashSet<CFGNode>();
+			loop.getCFGNode().getScopeNextNodes(endNodes);
+			CFGIterator.iterateCFGForwards(new CFGIterator.CFGNodeCallback() {
+				@Override
+				public boolean process(CFGNode node) {
+					node.gatherDFGNodesInto(nodes);
+					return true;
+				}
+			}, loop.getCFGNode(), endNodes);
+			
+			for(DFGNode n : nodes) {
+				if(!SupportedTypes.includes(n.type)) {
+					if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported type contained: "+n.type); }
+					loop.setTypesCombatable(false);
+					break;
+				}
+			}
+		}
+	}
+
+	private void determineLoopsEarlyReturnCompatability() {
+		for(final LoopDescription loop : currentBlocksLoops.values()) {
+			loop.setEarlyReturnCombatable(true);
+			
+			boolean canHaveReturns = loop.getCFGNode().endNode.next instanceof CFGNode.ReturnNode;
+			
+			if(!canHaveReturns) {
+				Set<CFGNode> endNodes = new HashSet<CFGNode>();
+				loop.getCFGNode().getScopeNextNodes(endNodes);
+				
+				CFGIterator.iterateCFGForwards(new CFGNodeCallback() {
+					@Override
+					public boolean process(CFGNode node) {
+						if(node instanceof CFGNode.ReturnNode) {
+							loop.setEarlyReturnCombatable(false);
+							return false;
+						}
+						
+						return true;
+					}
+				}, loop.getCFGNode(), endNodes);
+			}
+		}
+	}
+
+	private void determineLoopsBytecodeCompatability() {
+		if(DEBUG) { System.err.println("Determine bytecode compatability"); }
+		
+		for(final LoopDescription loop : currentBlocksLoops.values()) {
+			loop.setBytecodesGPUCombatable(true);
+			
+			Set<CFGNode> endNodes = new HashSet<CFGNode>();
+			loop.getCFGNode().getScopeNextNodes(endNodes);
+			
+			CFGIterator.iterateCFGForwards(new CFGNodeCallback() {
+				@Override
+				public boolean process(CFGNode node) {
+					if(node instanceof VanillaCFGNode) {
+						VanillaCFGNode vanilaNode = (VanillaCFGNode)node;
+						for(Bytecode b : vanilaNode.body.instructions) {
+							if(!(b instanceof Bytecode.GPUSupportedBytecode)) {
+								loop.setBytecodesGPUCombatable(false);
+								if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported bytecode contained: "+b); }
+								return false;
+							}
+						}
+					}
+					else if(!(node instanceof CFGNode.GPUSupportedNode)) {
+						loop.setBytecodesGPUCombatable(false);
+						if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported node contained: "+node); }
+						return false;
+					}
+					else {
+						CFGNode.GPUSupportedNode gpuNode = (CFGNode.GPUSupportedNode)node;
+						if(!gpuNode.isGPUSupported()) {
+							loop.setBytecodesGPUCombatable(false);
+							if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported node contained: "+node); }
+							return false;
+						}
+					}
+					
+					return true;
+				}
+			}, loop.getCFGNode(), endNodes);
+		}
+	}
+	
+	private void determineLoopsBreakCompatability() {
+		if(DEBUG) { System.err.println("Determine loop break compatability"); }
+		
+		for(LoopDescription loop : currentBlocksLoops.values()) {
+			loop.setBreaksGPUCombatable(true);			
+			
+			for(CFGNode.LoopBreakNode node : loop.getCFGNode().breakNodes) {
+				if(node.next != loop.getCFGNode().endNode.next) {
+					if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported loop break contained: "+node); }
+					loop.setBreaksGPUCombatable(false);
+				}
+			}
+		}
+	}
+	
+	private void determineLoopsDataDependancyCompatability() {
+		if(DEBUG) { System.err.println("Determine loop data dependancies"); }
+		
+		for(LoopDescription loop : currentBlocksLoops.values()) {
+			loop.setDataDependanciesCombatable(true);
+			
+			// FIXME: check for read before write, not occurrence - always going to be there.
+			
+//			boolean earlyBreak = false;
+//			
+//			ForLoopNode cfgNode = loop.getCFGNode();
+//			for(Pair<Type, Set<DFGNode>> value : cfgNode.body.getStartTypes().values()) {
+//				for(DFGNode dfgNode : value.second()) {
+//					CFGNode node = null;
+//					if(dfgNode.cause instanceof Bytecode) {
+//						Bytecode bytecode = (Bytecode)dfgNode.cause;
+//						node = bytecode.cfgNode;
+//					}
+//					else if(dfgNode.cause instanceof CFGNode) {
+//						node = (CFGNode)dfgNode.cause;
+//					}
+//					else if(dfgNode.cause == null) { // This can only occur for registers defined outside this function, i.e. argument
+//						break;
+//					}
+//					else {
+//						throw new InternalError("Unknown DFGNode cause: " + dfgNode.cause);
+//					}
+//					
+//					if(CFGIterator.doesNodeDependUpon(node, cfgNode.body, cfgNode.endNode)) {
+//						loop.setDataDependanciesCombatable(false);
+//						if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported data denendancy contained on register: "+dfgNode.register); }
+//						earlyBreak = true;
+//					}
+//					
+//					if(earlyBreak) { break; }
+//				}
+//				
+//				if(earlyBreak) { break; }
+//			}
+		}
+	}
+	
+	private void determineLoopTypes() {
+		if(DEBUG) { System.err.println("Deterine loop types"); }
+		
+		final Stack<LoopDescription> outerLoops = new Stack<LoopDescription>();
+		
+		CFGIterator.traverseNestedRepresentation(currentBlocksSortedCFG, new CFGIterator.CFGNestedRepresentationVisitor() {
+			@Override
+			public void visitNonNestedNode(CFGNode node) {
+				if(node instanceof CFGNode.ForLoopNode) {
+					LoopDescription loop = currentBlocksLoops.get(((CFGNode.ForLoopNode) node).getBytecode().getWYILLangBytecode());
+					if(outerLoops.isEmpty()) {
+						if(loop.getLoopCombatability()) {
+							loop.setType(LoopType.GPU_IMPLICIT);
+						}
+						else {
+							loop.setType(LoopType.CPU_EXPLICIT);
+						}
+					}
+					else {
+						switch(outerLoops.peek().getType()) {
+							case GPU_EXPLICIT:
+								loop.setType(LoopType.GPU_EXPLICIT);
+								break;
+							case GPU_IMPLICIT:
+								// TODO: implicit inside implicit
+								loop.setType(LoopType.GPU_EXPLICIT);
+								break;
+							case CPU_EXPLICIT:
+								if(loop.getLoopCombatability()) {
+									loop.setType(LoopType.GPU_IMPLICIT);
+								}
+								else {
+									loop.setType(LoopType.CPU_EXPLICIT);
+								}
+								break;
+						}
+					}
+				}
+			}
+			
+			@Override
+			public void exitedNestedNode(CFGNode node) {
+				if(node instanceof CFGNode.ForLoopNode) {
+					outerLoops.pop();
+				}
+			}
+			
+			@Override
+			public void enteredNestedNode(CFGNode node, List<Entry> nestedEntries) {
+				if(node instanceof CFGNode.ForLoopNode) {
+					outerLoops.push(currentBlocksLoops.get(((CFGNode.ForLoopNode) node).getBytecode().getWYILLangBytecode()));
+				}
+			}
+		});
 	}
 
 	public void endBlock() {
 		currentBlock = null;
-	}
-
-	public int getIndexRegister() {
-		return indexRegister;
-	}
-
-	public void setIndexRegister(int indexRegister) {
-		this.indexRegister = indexRegister;
+		currentBlocksCFG = null;
+		currentBlocksLoops = null;
 	}
 	
+	public void beginMethod(WyilFile.MethodDeclaration method) {
+		methodArgumentsDFGNodes = new HashMap<Integer, DFGNode>();
+		
+		int register = 0;
+		for(Type t : method.type().params()) {
+			DFGNode node = new DFGNode(null, register, t, true);
+			methodArgumentsDFGNodes.put(register, node);
+			register++;
+		}
+	}
+
+	public void endMethod() {
+		methodArgumentsDFGNodes = null;
+	}
+
+	public List<Block.Entry> getReplacementEntries() {
+		return replacementEntries;
+	}
+	
+	public List<CFGIterator.Entry> getLoopBody() {
+		return currentLoop.getNestedEntries();
+	}
+	
+	public ForLoopNode getLoopNode() {
+		return currentLoop.getCFGNode();
+	}
+
 	public List<Argument> getKernelArguments() {
 		return kernelArguments;
 	}

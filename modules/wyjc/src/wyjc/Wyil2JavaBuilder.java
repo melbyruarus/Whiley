@@ -2829,7 +2829,7 @@ public class Wyil2JavaBuilder implements Builder {
 	 * @author David J. Pearce
 	 *
 	 */
-	protected abstract static class JvmConstant {}
+	public abstract static class JvmConstant {}
 	
 	protected  static final class JvmValue extends JvmConstant {
 		public final Constant value;

@@ -2,31 +2,68 @@ package wyocl.openclwriter;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import wybs.util.Pair;
-import wyil.lang.Block;
 import wyil.lang.Code;
 import wyil.lang.Code.Comparator;
-import wyil.lang.Code.ForAll;
 import wyil.lang.Code.UnArithKind;
-import wyil.lang.Code.UnArithOp;
 import wyil.lang.Constant;
 import wyil.lang.Type;
 import wyil.lang.Type.Leaf;
+import wyocl.ar.Bytecode;
+import wyocl.ar.Bytecode.GPUSupportedBytecode;
+import wyocl.ar.Bytecode.Not;
+import wyocl.ar.CFGNode;
+import wyocl.ar.Bytecode.Assign;
+import wyocl.ar.Bytecode.Binary;
+import wyocl.ar.Bytecode.ComparisonBasedJump;
+import wyocl.ar.Bytecode.ConstLoad;
+import wyocl.ar.Bytecode.Convert;
+import wyocl.ar.Bytecode.For;
+import wyocl.ar.Bytecode.Invoke;
+import wyocl.ar.Bytecode.Label;
+import wyocl.ar.Bytecode.LengthOf;
+import wyocl.ar.Bytecode.Load;
+import wyocl.ar.Bytecode.LoopEnd;
+import wyocl.ar.Bytecode.Move;
+import wyocl.ar.Bytecode.Return;
+import wyocl.ar.Bytecode.Switch;
+import wyocl.ar.Bytecode.TupleLoad;
+import wyocl.ar.Bytecode.Unary;
+import wyocl.ar.Bytecode.UnconditionalJump;
+import wyocl.ar.Bytecode.Update;
+import wyocl.ar.Bytecode.While;
+import wyocl.ar.CFGNode.ConditionalJumpNode;
+import wyocl.ar.CFGNode.ForLoopNode;
+import wyocl.ar.CFGNode.LoopBreakNode;
+import wyocl.ar.CFGNode.LoopEndNode;
+import wyocl.ar.CFGNode.MultiConditionalJumpNode;
+import wyocl.ar.CFGNode.PassThroughNode;
+import wyocl.ar.CFGNode.ReturnNode;
+import wyocl.ar.CFGNode.UnresolvedTargetNode;
+import wyocl.ar.CFGNode.VanillaCFGNode;
+import wyocl.ar.CFGNode.WhileLoopNode;
+import wyocl.ar.utils.BytecodeInstanceSwitch;
+import wyocl.ar.utils.CFGInstanceSwitch;
+import wyocl.ar.utils.CFGIterator;
+import wyocl.ar.utils.CFGIterator.Entry;
 import wyocl.filter.Argument;
 import wyocl.openclwriter.OpenCLTypeWriter.ExpressionWriter;
 
 public class OpenCLOpWriter {
 	private static final String GPGPU_RUNTIME_PREFIX = "whiley_gpgpu_runtime_";
 	private static final boolean WRITE_BYTECODES_TO_COMMENTS = true;
-	public final OpenCLTypeWriter typeWriter = new OpenCLTypeWriter();;
-	private int indentationLevel = 1;
-	private ArrayList<String> scopeEndLabels = new ArrayList<String>();
-	private int forallIndexCount = 0;
+	private static final String LABEL_PREFIX = "label";
+	private static final boolean DEBUG = false;
+	
+	public final OpenCLTypeWriter typeWriter = new OpenCLTypeWriter();
 	private final FunctionInvokeTranslator functionTranslator;
 	
 	public interface FunctionInvokeTranslator {
@@ -38,10 +75,10 @@ public class OpenCLOpWriter {
 		 * file. The appropriate place to write these called functions is when this 
 		 * method is called.
 		 * 
-		 * @param code The bytecode of the function invoke
+		 * @param b The bytecode of the function invoke
 		 * @return The name of the translated function
 		 */
-		public String translateFunctionName(Code.Invoke code);
+		public String translateFunctionName(Bytecode b);
 	}
 	
 	public static void writeRuntime(PrintWriter writer) { // TODO: this should be loaded in from a file or something
@@ -55,42 +92,35 @@ public class OpenCLOpWriter {
 		this.functionTranslator = functionTranslator;
 	}
 
-	public void writeBlock(List<Block.Entry> filteredEntries, PrintWriter bodyWriter) {
-		indentationLevel = 1;
+	public void writeBlock(CFGNode rootNode, List<Entry> entries, PrintWriter bodyWriter) {
 		StringWriter sw = new StringWriter();
-		PrintWriter writer = new PrintWriter(sw);
+		final PrintWriter writer = new PrintWriter(sw);
 		
-		if(filteredEntries.size() > 0) {
-			Block.Entry first = filteredEntries.get(0);
-			if(first.code instanceof Code.Loop) {
-				filteredEntries = filteredEntries.subList(1, filteredEntries.size());
+		if(rootNode instanceof CFGNode.ForLoopNode) {
+			CFGNode.ForLoopNode loopNode = (CFGNode.ForLoopNode)rootNode;
+			if(entries.size() > 0) {
+				Bytecode.For forAll = loopNode.getBytecode();
+				Utils.writeIndents(writer, 1);
+				typeWriter.writeLHS(forAll.getIndexRegister(), forAll.getIndexType(), writer);
+				writer.print(" = ");
+				typeWriter.writeListAccessor(forAll.getSourceRegister(), new ExpressionWriter() {
+					@Override
+					public void writeExpression(PrintWriter writer) {
+						writeKernelGlobalIndex(0, writer); // TODO: Support multiple dimensions
+					}
+				}, writer);
+				writer.println("; // Get work item");
 				
-				if(first.code instanceof Code.ForAll) {
-					Code.ForAll forAll = (ForAll)first.code;
-					writeIndents(writer);
-					typeWriter.writeLHS(forAll.indexOperand, forAll.type.element(), writer);
-					writer.print(" = ");
-					typeWriter.writeListAccessor(forAll.sourceOperand, new ExpressionWriter() {
-						@Override
-						public void writeExpression(PrintWriter writer) {
-							writeKernelGlobalIndex(0, writer); // TODO: Support multiple dimensions
-						}
-					}, writer);
-					writer.println("; // Get work item");
-				}
-				else {
-					throw new NotImplementedException();
-					
-					// TODO: implement
-				}
+				entries.remove(entries.size()-1);
 			}
 		}
 		
-		for(Block.Entry e : filteredEntries) {
-			writeBlockEntry(e, writer);
-		}
+		new Task(writer).execute(entries);
 		
+		bodyWriter.print("\n\t// Beginning Boilerplate\n\n");
 		bodyWriter.print(typeWriter.boilerPlate());
+		bodyWriter.print("\n\t// Ending Boilerplate\n\n");
+		bodyWriter.print("\n\t// Begin kernel\n\n");
 		bodyWriter.print(sw.toString());
 	}
 	
@@ -100,664 +130,829 @@ public class OpenCLOpWriter {
 		writer.print(')');
 	}
 	
-	private void writeBlockEntry(Block.Entry entry, PrintWriter writer) {
-		Code code = entry.code;
-		if(code instanceof Code.ForAll) {
-			writeCode((Code.ForAll)code, writer);
-		}
-		else if(code instanceof Code.Loop) { // Must be after Code.ForAll
-			writeCode((Code.Loop)code, writer);
-		}
-		else if(code instanceof Code.Nop) {
-			writeCode((Code.Nop)code, writer);
-		}
-		else if(code instanceof Code.TryCatch) {
-			writeCode((Code.TryCatch)code, writer);
-		}
-		else if(code instanceof Code.Const) {
-			writeCode((Code.Const)code, writer);
-		}
-		else if(code instanceof Code.Goto) {
-			writeCode((Code.Goto)code, writer);
-		}
-		else if(code instanceof Code.TryEnd) { // Must be before Code.Label
-			writeCode((Code.TryEnd)code, writer);
-		}
-		else if(code instanceof Code.Label) {
-			writeCode((Code.Label)code, writer);
-		}
-		else if(code instanceof Code.Assert) {
-			writeCode((Code.Assert)code, writer);
-		}
-		else if(code instanceof Code.Assign) {
-			writeCode((Code.Assign)code, writer);
-		}
-		else if(code instanceof Code.Convert) {
-			writeCode((Code.Convert)code, writer);
-		}
-		else if(code instanceof Code.Debug) {
-			writeCode((Code.Debug)code, writer);
-		}
-		else if(code instanceof Code.Dereference) {
-			writeCode((Code.Dereference)code, writer);
-		}
-		else if(code instanceof Code.Assume) {
-			writeCode((Code.Assume)code, writer);
-		}
-		else if(code instanceof Code.FieldLoad) {
-			writeCode((Code.FieldLoad)code, writer);
-		}
-		else if(code instanceof Code.If) {
-			writeCode((Code.If)code, writer);
-		}
-		else if(code instanceof Code.IfIs) {
-			writeCode((Code.IfIs)code, writer);
-		}
-		else if(code instanceof Code.IndexOf) {
-			writeCode((Code.IndexOf)code, writer);
-		}
-		else if(code instanceof Code.IndirectInvoke) {
-			writeCode((Code.IndirectInvoke)code, writer);
-		}
-		else if(code instanceof Code.Invert) {
-			writeCode((Code.Invert)code, writer);
-		}
-		else if(code instanceof Code.Invoke) {
-			writeCode((Code.Invoke)code, writer);
-		}
-		else if(code instanceof Code.Lambda) {
-			writeCode((Code.Lambda)code, writer);
-		}
-		else if(code instanceof Code.LengthOf) {
-			writeCode((Code.LengthOf)code, writer);
-		}
-		else if(code instanceof Code.Move) {
-			writeCode((Code.Move)code, writer);
-		}
-		else if(code instanceof Code.NewList) {
-			writeCode((Code.NewList)code, writer);
-		}
-		else if(code instanceof Code.NewMap) {
-			writeCode((Code.NewMap)code, writer);
-		}
-		else if(code instanceof Code.NewObject) {
-			writeCode((Code.NewObject)code, writer);
-		}
-		else if(code instanceof Code.NewRecord) {
-			writeCode((Code.NewRecord)code, writer);
-		}
-		else if(code instanceof Code.NewSet) {
-			writeCode((Code.NewSet)code, writer);
-		}
-		else if(code instanceof Code.NewTuple) {
-			writeCode((Code.NewTuple)code, writer);
-		}
-		else if(code instanceof Code.Not) {
-			writeCode((Code.Not)code, writer);
-		}
-		else if(code instanceof Code.Return) {
-			writeCode((Code.Return)code, writer);
-		}
-		else if(code instanceof Code.SubList) {
-			writeCode((Code.SubList)code, writer);
-		}
-		else if(code instanceof Code.SubString) {
-			writeCode((Code.SubString)code, writer);
-		}
-		else if(code instanceof Code.Switch) {
-			writeCode((Code.Switch)code, writer);
-		}
-		else if(code instanceof Code.Throw) {
-			writeCode((Code.Throw)code, writer);
-		}
-		else if(code instanceof Code.TupleLoad) {
-			writeCode((Code.TupleLoad)code, writer);
-		}
-		else if(code instanceof Code.Update) {
-			writeCode((Code.Update)code, writer);
-		}
-		else if(code instanceof Code.Void) {
-			writeCode((Code.Void)code, writer);
-		}
-		else if(code instanceof Code.BinArithOp) {
-			writeCode((Code.BinArithOp)code, writer);
-		}
-		else if(code instanceof Code.BinListOp) {
-			writeCode((Code.BinListOp)code, writer);
-		}
-		else if(code instanceof Code.BinSetOp) {
-			writeCode((Code.BinSetOp)code, writer);
-		}
-		else if(code instanceof Code.BinStringOp) {
-			writeCode((Code.BinStringOp)code, writer);
-		}
-		else if(code instanceof Code.UnArithOp) {
-			writeCode((Code.UnArithOp)code, writer);
-		}
-		else {
-			throw new RuntimeException("Unknown bytecode encountered: "+code+" ("+code.getClass()+")");
-		}
-	}
-
-	private void writeIndents(PrintWriter writer) {
-		Utils.writeIndents(writer, indentationLevel);
-	}
-	
-	private void writePrimitiveBinArithOp(Code.BinArithKind kind, Type.Leaf type, ExpressionWriter lhs, ExpressionWriter rhs, PrintWriter writer) {
-		writer.print('(');
-		switch(kind) {
-			case ADD:
-				lhs.writeExpression(writer);
-				writer.print(' ');
-				writer.print('+');
-				writer.print(' ');
-				rhs.writeExpression(writer);
-				break;
-			case SUB:
-				lhs.writeExpression(writer);
-				writer.print(' ');
-				writer.print('-');
-				writer.print(' ');
-				rhs.writeExpression(writer);
-				break;
-			case MUL:
-				lhs.writeExpression(writer);
-				writer.print(' ');
-				writer.print('*');
-				writer.print(' ');
-				rhs.writeExpression(writer);
-				break;
-			case DIV:
-				lhs.writeExpression(writer);
-				writer.print(' ');
-				writer.print('/');
-				writer.print(' ');
-				rhs.writeExpression(writer);
-				break;
-			case BITWISEAND:
-				lhs.writeExpression(writer);
-				writer.print(' ');
-				writer.print('&');
-				writer.print(' ');
-				rhs.writeExpression(writer);
-				break;
-			case BITWISEOR:
-				lhs.writeExpression(writer);
-				writer.print(' ');
-				writer.print('|');
-				writer.print(' ');
-				rhs.writeExpression(writer);
-				break;
-			case BITWISEXOR:
-				lhs.writeExpression(writer);
-				writer.print(' ');
-				writer.print('^');
-				writer.print(' ');
-				rhs.writeExpression(writer);
-				break;
-			case LEFTSHIFT:
-				lhs.writeExpression(writer);
-				writer.print(' ');
-				writer.print("<<");
-				writer.print(' ');
-				rhs.writeExpression(writer);
-				break;
-			case RIGHTSHIFT:
-				lhs.writeExpression(writer);
-				writer.print(' ');
-				writer.print(">>");
-				writer.print(' ');
-				rhs.writeExpression(writer);
-				break;
-			case RANGE:
-				throw new NotImplementedException();
-			case REM:
-				lhs.writeExpression(writer);
-				writer.print(' ');
-				writer.print("%");
-				writer.print(' ');
-				rhs.writeExpression(writer);
-		}
-		writer.print(')');
-	}
-	
-	private void writePrimitiveUnArithOp(UnArithKind kind, Leaf type, ExpressionWriter expressionWriter, PrintWriter writer) {
-		writer.print('(');
-		switch(kind) {
-			case NEG:
-				writer.print('-');
-				expressionWriter.writeExpression(writer);
-				break;
-			case DENOMINATOR:
-				throw new NotSupportedByGPGPUException();
-			case NUMERATOR:
-				throw new NotSupportedByGPGPUException();
-		}
-		writer.print(')');
-	}
-	
-	private void writeComparitor(Comparator op, int leftOperand, int rightOperand, PrintWriter writer) {
-		writer.print('(');
-		switch(op) {
-			case SUBSET:
-				throw new NotImplementedException();
-			case SUBSETEQ:
-				throw new NotImplementedException();
-			case ELEMOF:
-				throw new NotImplementedException();
-			case EQ:
-				typeWriter.writeRHS(leftOperand, writer);
-				writer.print(" == ");
-				typeWriter.writeRHS(rightOperand, writer);
-				break;
-			case GT:
-				typeWriter.writeRHS(leftOperand, writer);
-				writer.print(" > ");
-				typeWriter.writeRHS(rightOperand, writer);
-				break;
-			case GTEQ:
-				typeWriter.writeRHS(leftOperand, writer);
-				writer.print(" >= ");
-				typeWriter.writeRHS(rightOperand, writer);
-				break;
-			case LT:
-				typeWriter.writeRHS(leftOperand, writer);
-				writer.print(" < ");
-				typeWriter.writeRHS(rightOperand, writer);
-				break;
-			case LTEQ:
-				typeWriter.writeRHS(leftOperand, writer);
-				writer.print(" <= ");
-				typeWriter.writeRHS(rightOperand, writer);
-				break;
-			case NEQ:
-				typeWriter.writeRHS(leftOperand, writer);
-				writer.print(" != ");
-				typeWriter.writeRHS(rightOperand, writer);
-				break;
-		}
-		writer.print(')');
-	}
-	
-	private void beginScope(String scopeEnd) {
-		indentationLevel++;
-		scopeEndLabels.add(scopeEnd);
-	}
-	
-	private void checkEndScope(Code.Label code, PrintWriter writer) {
-		while(scopeEndLabels.contains(code.label)) {
-			indentationLevel--;
-			writeIndents(writer);
-			writer.print('}');
-			writeLineEnd(code, false, writer);
-			scopeEndLabels.remove(code.label);
-		}
-	}
-	
-	private void writeLineEnd(Code code, PrintWriter writer) {
-		writeLineEnd(code, true, writer);
-	}
-	
-	private void writeLineEnd(Code code, boolean semicolon, PrintWriter writer) {
-		if(semicolon) {
-			writer.print(';');
-		}
-		
-		if(WRITE_BYTECODES_TO_COMMENTS) {
-			writer.print(" // ");
-			writer.println(code);
-		}
-		else {
-			writer.print('\n');
-		}
-	}
-	
-	private void writeCode(final UnArithOp code, PrintWriter writer) {
-		if(!(code.type instanceof Type.Leaf)){
-			throw new RuntimeException("Dont know how to handle nonleaf types for UnArithOp: "+code.type);
-		}
-		
-		writeIndents(writer);
-		typeWriter.writeLHS(code.target, code.type, writer);
-		writer.print(" = ");
-		writePrimitiveUnArithOp(code.kind, (Type.Leaf)code.type, new ExpressionWriter() {
-			@Override
-			public void writeExpression(PrintWriter writer) {
-				typeWriter.writeRHS(code.operand, writer);
-			}
-		}, writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.BinStringOp code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.BinSetOp code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.BinListOp code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(final Code.BinArithOp code, PrintWriter writer) {
-		if(!(code.type instanceof Type.Leaf)){
-			throw new RuntimeException("Dont know how to handle nonleaf types for BinArithOp: "+code.type);
-		}
-		
-		writeIndents(writer);
-		typeWriter.writeLHS(code.target, code.type, writer);
-		writer.print(" = ");
-		writePrimitiveBinArithOp(code.kind, (Type.Leaf)code.type, new ExpressionWriter() {
-			
-			@Override
-			public void writeExpression(PrintWriter writer) {
-				typeWriter.writeRHS(code.leftOperand, writer);
-			}
-		}, new ExpressionWriter() {
-			
-			@Override
-			public void writeExpression(PrintWriter writer) {
-				typeWriter.writeRHS(code.rightOperand, writer);
-			}
-		}, writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.Void code, PrintWriter writer) {
-		writeIndents(writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.Update code, PrintWriter writer) {
-		// TODO: implement this properly
-		if(code.type instanceof Type.List) {
-			for(Code.LVal<Type.EffectiveList> _lv : code) {
-				final Code.ListLVal lv = (Code.ListLVal)_lv;
+	private class Task {
+		private final PrintWriter writer;
+		private final Map<CFGNode, Integer> nodeIndexes = new HashMap<CFGNode, Integer>();
+		private final Map<Integer, CFGNode> reverseNodeIndexes = new HashMap<Integer, CFGNode>();
+		private final Set<CFGNode> nodesNeedingLabels = new HashSet<CFGNode>();
 				
-				writeIndents(writer);
-				typeWriter.writeListAccessor(code.target, new ExpressionWriter() {
-					@Override
-					public void writeExpression(PrintWriter writer) {
-						typeWriter.writeRHS(lv.indexOperand, writer);
-					}
-				}, writer);
-				writer.print(" = ");
-				typeWriter.writeRHS(code.operand, writer); // TODO: support more than one
-				writeLineEnd(code, writer);
+		private int indentationLevel = 1;
+		
+		public Task(PrintWriter writer) {
+			this.writer = writer;
+		}
+		
+		private void execute(List<Entry> entries) {			
+			populateIndexes(entries);
+			
+			CFGIterator.traverseNestedRepresentation(entries, new CFGIterator.CFGNestedRepresentationVisitor() {
+				@Override
+				public void visitNonNestedNode(CFGNode node) {
+					writeCFGNode(node);
+				}
+				
+				@Override
+				public void exitedNestedNode(CFGNode node) {
+					indentationLevel--;
+				}
+				
+				@Override
+				public void enteredNestedNode(CFGNode node, List<Entry> nestedEntries) {
+					indentationLevel++;
+				}
+			});
+		}
+		
+		private void populateIndexes(List<Entry> entries) {
+			final int index[] = new int[1];
+			index[0] = 0;
+			
+			CFGIterator.traverseNestedRepresentation(entries, new CFGIterator.CFGNestedRepresentationVisitor() {
+				@Override
+				public void visitNonNestedNode(CFGNode node) {
+					nodeIndexes.put(node, index[0]);
+					reverseNodeIndexes.put(index[0], node);
+					index[0]++;
+				}
+				
+				@Override
+				public void exitedNestedNode(CFGNode node) {
+				}
+				
+				@Override
+				public void enteredNestedNode(CFGNode node, List<Entry> nestedEntries) {
+				}
+			});
+		}
+		
+		private void writeCFGNode(CFGNode node) {
+			CFGInstanceSwitch.on(node, new CFGInstanceSwitch.CFGInstanceSwitchVisitor() {
+				@Override
+				public void visitWhileNode(WhileLoopNode node) {
+					writeWhileNode(node);
+				}
+				
+				@Override
+				public void visitVanillaNode(VanillaCFGNode node) {
+					writeVanillaNode(node);
+				}
+				
+				@Override
+				public void visitUnresolvedTargetNode(UnresolvedTargetNode node) {
+					throw new RuntimeException("Internal state inconsistancy");
+				}
+				
+				@Override
+				public void visitReturnNode(ReturnNode node) {
+					writeReturnNode(node);
+				}
+				
+				@Override
+				public void visitMultiConditionalJumpNode(MultiConditionalJumpNode node) {
+					writeMulticonditionalJumpNode(node);
+				}
+				
+				@Override
+				public void visitLoopEndNode(LoopEndNode node) {
+					writeLoopEndNode(node);
+				}
+				
+				@Override
+				public void visitLoopBreakNode(LoopBreakNode node) {
+					writeLoopBreakNode(node);
+				}
+				
+				@Override
+				public void visitForNode(ForLoopNode node) {
+					writeForNode(node);
+				}
+				
+				@Override
+				public void visitConditionalJumpNode(ConditionalJumpNode node) {
+					writeConditionalJumpNode(node);
+				}
+			});
+		}
+	
+		protected void writeConditionalJumpNode(ConditionalJumpNode node) {
+			checkAndAddLabelIfNeeded(node);
+			
+			if(node.getBytecode() instanceof Bytecode.ComparisonBasedJump) {
+				Bytecode.ComparisonBasedJump ifCode = (Bytecode.ComparisonBasedJump)node.getBytecode();
+				
+				boolean needMet = checkIfNeedingJumps(node, node.conditionMet);
+				boolean needUnmet = checkIfNeedingJumps(node, node.conditionUnmet);
+				
+				boolean needsElse = needMet == needUnmet;
+				boolean reversing = needUnmet && !needMet && comparisonReversable(ifCode.getComparison());
+				
+				Code.Comparator comparison = reversing ? reverseComparison(ifCode.getComparison()) : ifCode.getComparison();
+				CFGNode whenMet = reversing ? node.conditionUnmet : node.conditionMet;
+				CFGNode whenUnmet = reversing ? node.conditionMet : node.conditionUnmet;
+				
+				writeIndents();
+				writer.print("if(");
+				writeComparitor(comparison, ifCode.getLeftOperand(), ifCode.getRightOperand());
+				writer.print(") { ");
+				checkAndAddJumpsIfNeeded(node, whenMet, 0, false);
+				writer.print(" }");
+				writeLineEnd(ifCode, false);
+				if(needsElse) {
+					writeIndents();
+					writer.print("else { ");
+					checkAndAddJumpsIfNeeded(node, whenUnmet, 0, false);
+					writer.print(" }");
+					writeLineEnd(ifCode, false);
+				}
 			}
 		}
-		else {
-			throw new NotImplementedException();
-		}
-	}
+	
+		
 
-	private void writeCode(final Code.TupleLoad code, PrintWriter writer) {
-		writeIndents(writer);
-		typeWriter.writeLHS(code.target, code.type.element(code.index), writer);
-		writer.print(" = ");
-		typeWriter.writeTupleAccessor(code.operand, new ExpressionWriter() {
-			@Override
-			public void writeExpression(PrintWriter writer) {
-				writer.print(code.index);
-			}
-		}, writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.Throw code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.Switch code, PrintWriter writer) {
-		writeIndents(writer);
-		for(Pair<Constant, String> caseStatement : code.branches) {
-			writer.print("if(");
-			writer.print(caseStatement.first());
-			writer.print(" == ");
-			typeWriter.writeRHS(code.operand, writer);
-			writer.print(") { goto ");
-			writer.print(caseStatement.second());
-			writer.print("; }");
-			writeLineEnd(code, false, writer);
-			writeIndents(writer);
-			writer.print("else ");
-		}
-		writer.print("{ goto ");
-		writer.print(code.defaultTarget);
-		writer.print("; }");
-		writeLineEnd(code, false, writer);
-	}
-
-	private void writeCode(Code.SubString code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.SubList code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.Return code, PrintWriter writer) {
-		writeIndents(writer);
-		writer.print("return ");
-		typeWriter.writeRHS(code.operand, writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.Not code, PrintWriter writer) {
-		writeIndents(writer);
-		typeWriter.writeLHS(code.target, code.type, writer);
-		writer.print(" = !");
-		typeWriter.writeRHS(code.operand, writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.NewTuple code, PrintWriter writer) {
-		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
-	}
-
-	private void writeCode(Code.NewSet code, PrintWriter writer) {
-		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
-	}
-
-	private void writeCode(Code.NewRecord code, PrintWriter writer) {
-		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
-	}
-
-	private void writeCode(Code.NewMap code, PrintWriter writer) {
-		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
-	}
-
-	private void writeCode(Code.NewObject code, PrintWriter writer) {
-		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
-	}
-
-	private void writeCode(Code.NewList code, PrintWriter writer) {
-		throw new NotSupportedByGPGPUException("Dynamic memory allocation not supported");
-	}
-
-	private void writeCode(Code.Move code, PrintWriter writer) {
-		writeIndents(writer);
-		typeWriter.writeLHS(code.target, code.type, writer);
-		writer.print(" = ");
-		typeWriter.writeRHS(code.operand, writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.LengthOf code, PrintWriter writer) {
-		writeIndents(writer);
-		typeWriter.writeLHS(code.target, code.type.element(), writer);
-		writer.print(" = ");
-		typeWriter.writeListLength(code.operand, writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.Lambda code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.Invoke code, PrintWriter writer) {
-		writeIndents(writer);
-		if(code.type.ret() != Type.T_VOID) {
-			typeWriter.writeLHS(code.target, code.type.ret(), writer);
+		protected void writeForNode(ForLoopNode node) {
+			final int index = nodeIndexes.get(node);
+			checkAndAddLabelIfNeeded(node);
+			
+			Bytecode.For forAll = node.getBytecode();
+			
+			writeIndents();
+			writer.print("for(int loopIndex");
+			writer.print(index);
+			writer.print(" = 0; loopIndex");
+			writer.print(index);
+			writer.print(" < ");
+			typeWriter.writeListLength(forAll.getSourceRegister(), writer);
+			writer.print("; loopIndex");
+			writer.print(index);
+			writer.print("++) {");
+			writeLineEnd(forAll);
+			writeIndents(1);
+			typeWriter.writeLHS(forAll.getIndexRegister(), forAll.getIndexType(), writer);
 			writer.print(" = ");
+			typeWriter.writeListAccessor(forAll.getSourceRegister(), new OpenCLTypeWriter.ExpressionWriter() {
+				@Override
+				public void writeExpression(PrintWriter writer) {
+					writer.print("loopIndex");
+					writer.print(index);
+				}
+			}, writer);
+			writer.print(";\n");
+			
+			checkAndAddJumpsIfNeeded(node, node.body);
 		}
-		writer.print(functionTranslator.translateFunctionName(code));
-		writer.print('(');
-		String sep = "";
-		for(int arg : code.operands) {
-			writer.print(sep);
-			sep = ", ";
-			typeWriter.writeRHS(arg, writer);
+	
+		protected void writeLoopBreakNode(LoopBreakNode node) {
 		}
-		writer.print(')');
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.Invert code, PrintWriter writer) {
-		writeIndents(writer);
-		typeWriter.writeLHS(code.target, code.type, writer);
-		writer.print(" = ~");
-		typeWriter.writeRHS(code.operand, writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.IndirectInvoke code, PrintWriter writer) {
-		throw new NotSupportedByGPGPUException("Function pointers not supported");
-	}
-
-	private void writeCode(final Code.IndexOf code, PrintWriter writer) {
-		writeIndents(writer);
-		typeWriter.writeLHS(code.target, code.type.element(), writer);
-		writer.print(" = ");
-		typeWriter.writeListAccessor(code.leftOperand, new ExpressionWriter() {
-			@Override
-			public void writeExpression(PrintWriter writer) {
-				typeWriter.writeRHS(code.rightOperand, writer);
+	
+		protected void writeLoopEndNode(LoopEndNode node) {
+			checkAndAddLabelIfNeeded(node);
+			
+			writeIndents(-1);
+			writer.print("}\n");
+			
+			checkAndAddJumpsIfNeeded(node, node.next, -1, true);
+		}
+	
+		protected void writeMulticonditionalJumpNode(MultiConditionalJumpNode node) {			
+			checkAndAddLabelIfNeeded(node);
+			
+			writeIndents();
+			for(Pair<Constant, CFGNode> caseStatement : node.getBranches()) {
+				writer.print("if(");
+				writer.print(caseStatement.first());
+				writer.print(" == ");
+				typeWriter.writeRHS(node.getCheckedRegister(), writer);
+				writer.print(") { ");
+				checkAndAddJumpsIfNeeded(node, caseStatement.second(), 0, false);
+				writer.print(" }");
+				writeLineEnd(node.getBytecode(), false);
+				writeIndents();
+				writer.print("else ");
 			}
-		}, writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.IfIs code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.If code, PrintWriter writer) {
-		writeIndents(writer);
-		writer.print("if(");
-		writeComparitor(code.op, code.leftOperand, code.rightOperand, writer);
-		writer.print(") { goto ");
-		writer.print(code.target);
-		writer.print("; }");
-		writeLineEnd(code, false, writer);
-	}
-
-	private void writeCode(Code.FieldLoad code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.Assume code, PrintWriter writer) {
-		// TODO Auto-generated method stub
-		
-		writeIndents(writer);
-		writeLineEnd(code, false, writer);
-	}
-
-	private void writeCode(Code.Dereference code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.Debug code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.Convert code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.Assign code, PrintWriter writer) {
-		writeIndents(writer);
-		typeWriter.writeLHS(code.target, code.type, writer);
-		writer.print(" = ");
-		typeWriter.writeRHS(code.operand, writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.Assert code, PrintWriter writer) {
-		// TODO Auto-generated method stub
-		
-		writeIndents(writer);
-		writeLineEnd(code, false, writer);
-	}
-
-	private void writeCode(Code.Label code, PrintWriter writer) {
-		checkEndScope(code, writer);
-		writer.print(code.label);
-		writer.print(':');
-		writeLineEnd(code, writer); // Good to write a semicolon, means we always have a statement to jump to
-	}
-
-	private void writeCode(Code.Goto code, PrintWriter writer) {
-		writeIndents(writer);
-		writer.print("goto ");
-		writer.print(code.target);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.Const code, PrintWriter writer) {
-		writeIndents(writer);
-		typeWriter.writeLHS(code.target, code.constant.type(), writer);
-		writer.print(" = ");
-		writer.print(code.constant); // FIXME: should be looking at types
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.TryCatch code, PrintWriter writer) {
-		throw new NotImplementedException();
-	}
-
-	private void writeCode(Code.Nop code, PrintWriter writer) {
-		writeIndents(writer);
-		writeLineEnd(code, writer);
-	}
-
-	private void writeCode(Code.Loop code, PrintWriter writer) {
-		writeIndents(writer);
-		writer.print("while(1) {");
-		writeLineEnd(code, false, writer);
-		beginScope(code.target);
-	}
-
-	private void writeCode(Code.ForAll code, PrintWriter writer) {
-		// Write loop
-		writeIndents(writer);
-		forallIndexCount++;
-		final String indexVar = "forallIndex"+forallIndexCount;
-		writer.print("for(int ");
-		writer.print(indexVar);
-		writer.print(" = 0; ");
-		writer.print(indexVar);
-		writer.print(" < ");
-		typeWriter.writeListLength(code.sourceOperand, writer);
-		writer.print("; ++");
-		writer.print(indexVar);
-		writer.print(") {");
-		beginScope(code.target);
-		writeLineEnd(code, false, writer);
-		
-		// Write whiley index variable - i.e. use indexVar to access from source
-		writeIndents(writer);
-		typeWriter.writeLHS(code.indexOperand, code.type.element(), writer);
-		writer.print(" = ");
-		typeWriter.writeListAccessor(code.sourceOperand, new ExpressionWriter() {
-			@Override
-			public void writeExpression(PrintWriter writer) {
-				writer.print(indexVar);
+			writer.print("{ ");
+			checkAndAddJumpsIfNeeded(node, node.getDefaultBranch(), 0, false);
+			writer.print(" }");
+			writeLineEnd(node.getBytecode(), false);
+		}
+	
+		protected void writeReturnNode(ReturnNode node) {
+			checkAndAddLabelIfNeeded(node);
+			
+			Bytecode.Return returnBytecode = node.getBytecode();
+			
+			writeIndents();
+			if(returnBytecode == null) {
+				writer.print("return;\n");
+				return;
 			}
-		}, writer);
-		writeLineEnd(code, writer);
+			else {
+				if(returnBytecode.isVoid()) {
+					writer.print("return");
+					writeLineEnd(returnBytecode);
+					return;
+				}
+				else {
+					writer.print("return ");
+					typeWriter.writeRHS(returnBytecode.getOperand(), writer);
+					writeLineEnd(returnBytecode);
+					return;
+				}
+			}
+		}
+	
+		protected void writeVanillaNode(VanillaCFGNode node) {
+			checkAndAddLabelIfNeeded(node);
+			
+			for(Bytecode b : node.body.instructions) {
+				if(!(b instanceof Bytecode.GPUSupportedBytecode)) {
+					throw new RuntimeException("Internal inconsistancy exception");
+				}
+				
+				BytecodeInstanceSwitch.on((GPUSupportedBytecode) b, new BytecodeInstanceSwitch.BytecodeInstanceSwitchVisitor() {
+					@Override
+					public void visitWhile(While b) {
+						throw new RuntimeException("Unexecpeted bytecode: "+b);
+					}
+					
+					@Override
+					public void visitUpdate(Update b) {
+						writeUpdate(b);
+					}
+					
+					@Override
+					public void visitUnconditionalJump(UnconditionalJump b) {
+						throw new RuntimeException("Unexecpeted bytecode: "+b);
+					}
+					
+					@Override
+					public void visitUnary(Unary b) {
+						writeUnary(b);
+					}
+					
+					@Override
+					public void visitTupleLoad(TupleLoad b) {
+						writeTupleLoad(b);
+					}
+					
+					@Override
+					public void visitSwitch(Switch b) {
+						throw new RuntimeException("Unexecpeted bytecode: "+b);
+					}
+					
+					@Override
+					public void visitReturn(Return b) {
+						throw new RuntimeException("Unexecpeted bytecode: "+b);
+					}
+					
+					@Override
+					public void visitMove(Move b) {
+						writeMove(b);
+					}
+					
+					@Override
+					public void visitLoopEnd(LoopEnd b) {
+						throw new RuntimeException("Unexecpeted bytecode: "+b);
+					}
+					
+					@Override
+					public void visitLoad(Load b) {
+						writeLoad(b);
+					}
+					
+					@Override
+					public void visitLengthOf(LengthOf b) {
+						writeLengthOn(b);
+					}
+					
+					@Override
+					public void visitLabel(Label b) {
+						throw new RuntimeException("Unexecpeted bytecode: "+b);
+					}
+					
+					@Override
+					public void visitInvoke(Invoke b) {
+						writeInvoke(b);
+					}
+					
+					@Override
+					public void visitFor(For b) {
+						throw new RuntimeException("Unexecpeted bytecode: "+b);
+					}
+					
+					@Override
+					public void visitConvert(Convert b) {
+						throw new RuntimeException("Unexecpeted bytecode: "+b);
+					}
+					
+					@Override
+					public void visitConstLoad(ConstLoad b) {
+						writeConstLoad(b);
+					}
+					
+					@Override
+					public void visitComparisonBasedJump(ComparisonBasedJump b) {
+						throw new RuntimeException("Unexecpeted bytecode: "+b);
+					}
+					
+					@Override
+					public void visitBinary(Binary b) {
+						writeBinary(b);
+					}
+					
+					@Override
+					public void visitAssign(Assign b) {
+						writeAssign(b);
+					}
+	
+					@Override
+					public void visitNot(Not b) {
+						writeNot(b);
+					}
+				});
+			}
+			
+			checkAndAddJumpsIfNeeded(node, node.next);
+		}
+		
+		private boolean checkIfNeedingJumps(CFGNode node, CFGNode next) { // TODO: Share code with checkAndAddJumpsIfNeeded
+			if(!nodeIndexes.containsKey(next)) {
+				return true;
+			}
+			else {
+				CFGNode after;
+				int searchIndex = nodeIndexes.get(node)+1;
+				while(true) {
+					after = reverseNodeIndexes.get(searchIndex);
+				
+					if(after == null) {
+						return true;
+					}
+					else if(after instanceof PassThroughNode) {
+						searchIndex++;
+					}
+					else {
+						break;
+					}
+				}
+				
+				return !next.equals(after);
+			}
+		}
+	
+		private void checkAndAddJumpsIfNeeded(CFGNode node, CFGNode next) {
+			checkAndAddJumpsIfNeeded(node, next, 0, true);
+		}
+		
+		private void checkAndAddJumpsIfNeeded(CFGNode node, CFGNode next, int indentDiff, boolean newLines) {
+			if(!nodeIndexes.containsKey(next)) {
+				if(newLines) { writeIndents(indentDiff); }
+				writer.print("return;");
+				if(newLines) { writer.print('\n'); }
+			}
+			else {
+				CFGNode after;
+				int searchIndex = nodeIndexes.get(node)+1;
+				while(true) {
+					after = reverseNodeIndexes.get(searchIndex);
+				
+					if(after == null) {
+						if(newLines) { writeIndents(indentDiff); }
+						writer.print("return;");
+						if(newLines) { writer.print('\n'); }
+						return;
+					}
+					else if(after instanceof PassThroughNode) {
+						searchIndex++;
+					}
+					else {
+						break;
+					}
+				}
+				
+				if(!next.equals(after)) {
+					if(newLines) { writeIndents(indentDiff); }
+					while(true) {
+						if(next == null || !nodeIndexes.containsKey(next)) {
+							writer.print("return;");
+							if(newLines) { writer.print('\n'); }
+							return;
+						}
+						
+						if(next instanceof CFGNode.LoopBreakNode) {
+							int distance = 0;
+							CFGNode breakTarget = (CFGNode.LoopBreakNode)next;
+							while(breakTarget instanceof CFGNode.LoopBreakNode) {
+								breakTarget = ((CFGNode.LoopBreakNode)breakTarget).next;
+								distance++;
+							}
+							
+							// FIXME: check for switch statements
+							if(distance == 1 && nodeIndexes.containsKey(breakTarget)) {
+								writer.print("break;");
+								if(newLines) { writer.print('\n'); }
+								return;
+							}
+							else {
+								next = breakTarget;
+							}
+						}
+						else if(next instanceof CFGNode.ReturnNode) {
+							writeReturnNode((CFGNode.ReturnNode)next);
+						}
+						else {
+							writer.print("goto ");
+							writer.print(LABEL_PREFIX);
+							writer.print(nodeIndexes.get(next));
+							writer.print(';');
+							if(DEBUG) { writer.print("/* from: "+node + " followed by: " + after + " to: " + next + "*/"); }
+							if(newLines) { writer.print('\n'); }
+							
+							nodesNeedingLabels.add(next);
+							
+							return;
+						}
+					}
+				}
+			}
+		}
+	
+		private void checkAndAddLabelIfNeeded(CFGNode node) {
+			if(nodesNeedingLabels.contains(node)) {
+				writer.print(LABEL_PREFIX);
+				writer.print(nodeIndexes.get(node));
+				writer.print(":\n");
+			}
+		}
+	
+		protected void writeNot(Not b) {
+			writeIndents();
+			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
+			writer.print(" = !");
+			typeWriter.writeRHS(b.getOperand(), writer);
+			writeLineEnd(b);
+		}
+	
+		protected void writeAssign(Assign b) {
+			writeIndents();
+			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
+			writer.print(" = ");
+			typeWriter.writeRHS(b.getOperand(), writer);
+			writeLineEnd(b);
+		}
+	
+		protected void writeBinary(final Binary b) {
+			if(!(b.getType() instanceof Type.Leaf)){
+				throw new RuntimeException("Dont know how to handle nonleaf types for BinArithOp: "+b.getType());
+			}
+			
+			writeIndents();
+			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
+			writer.print(" = ");
+			writePrimitiveBinArithOp(b.getArithKind(), (Type.Leaf)b.getType(), new ExpressionWriter() {
+				
+				@Override
+				public void writeExpression(PrintWriter writer) {
+					typeWriter.writeRHS(b.getLeftOperand(), writer);
+				}
+			}, new ExpressionWriter() {
+				
+				@Override
+				public void writeExpression(PrintWriter writer) {
+					typeWriter.writeRHS(b.getRightOperand(), writer);
+				}
+			});
+			writeLineEnd(b);
+		}
+	
+		protected void writeConstLoad(ConstLoad b) {
+			writeIndents();
+			typeWriter.writeLHS(b.getTarget(), b.getConstant().type(), writer);
+			writer.print(" = ");
+			writer.print(b.getConstant()); // FIXME: should be looking at types
+			writeLineEnd(b);
+		}
+	
+		protected void writeInvoke(Invoke b) {
+			writeIndents();
+			if(b.getType().ret() != Type.T_VOID) {
+				typeWriter.writeLHS(b.getTarget(), b.getType().ret(), writer);
+				writer.print(" = ");
+			}
+			writer.print(functionTranslator.translateFunctionName(b));
+			writer.print('(');
+			String sep = "";
+			for(int arg : b.getOperands()) {
+				writer.print(sep);
+				sep = ", ";
+				typeWriter.writeRHS(arg, writer);
+			}
+			writer.print(')');
+			writeLineEnd(b);
+		}
+	
+		protected void writeLengthOn(LengthOf b) {
+			writeIndents();
+			typeWriter.writeLHS(b.getTarget(), b.getType().element(), writer);
+			writer.print(" = ");
+			typeWriter.writeListLength(b.getOperand(), writer);
+			writeLineEnd(b);
+		}
+	
+		protected void writeLoad(final Load b) {
+			writeIndents();
+			typeWriter.writeLHS(b.getTarget(), b.getType().element(), writer);
+			writer.print(" = ");
+			typeWriter.writeListAccessor(b.getLeftOperand(), new ExpressionWriter() {
+				@Override
+				public void writeExpression(PrintWriter writer) {
+					typeWriter.writeRHS(b.getRightOperand(), writer);
+				}
+			}, writer);
+			writeLineEnd(b);
+		}
+	
+		protected void writeMove(Move b) {
+			writeIndents();
+			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
+			writer.print(" = ");
+			typeWriter.writeRHS(b.getOperand(), writer);
+			writeLineEnd(b);
+		}
+	
+		protected void writeTupleLoad(final TupleLoad b) {
+			writeIndents();
+			typeWriter.writeLHS(b.getTarget(), b.getType().element(b.getIndex()), writer);
+			writer.print(" = ");
+			typeWriter.writeTupleAccessor(b.getOperand(), new ExpressionWriter() {
+				@Override
+				public void writeExpression(PrintWriter writer) {
+					writer.print(b.getIndex());
+				}
+			}, writer);
+			writeLineEnd(b);
+		}
+	
+		protected void writeUnary(final Unary b) {
+			if(!(b.getType() instanceof Type.Leaf)){
+				throw new RuntimeException("Dont know how to handle nonleaf types for UnArithOp: "+b.getType());
+			}
+			
+			writeIndents();
+			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
+			writer.print(" = ");
+			writePrimitiveUnArithOp(b.getArithKind(), (Type.Leaf)b.getType(), new ExpressionWriter() {
+				@Override
+				public void writeExpression(PrintWriter writer) {
+					typeWriter.writeRHS(b.getOperand(), writer);
+				}
+			});
+			writeLineEnd(b);
+		}
+	
+		protected void writeUpdate(Update b) {
+			// TODO: implement this properly
+			if(b.getDataStructureType() instanceof Type.List) {
+				for(Code.LVal<Type.EffectiveList> _lv : b.getLValueIterator()) {
+					final Code.ListLVal lv = (Code.ListLVal)_lv;
+					
+					writeIndents();
+					typeWriter.writeListAccessor(b.getTarget(), new ExpressionWriter() {
+						@Override
+						public void writeExpression(PrintWriter writer) {
+							typeWriter.writeRHS(lv.indexOperand, writer);
+						}
+					}, writer);
+					writer.print(" = ");
+					typeWriter.writeRHS(b.getOperand(), writer); // TODO: support more than one
+					writeLineEnd(b);
+				}
+			}
+			else {
+				throw new NotImplementedException();
+			}
+		}
+	
+		protected void writeWhileNode(WhileLoopNode node) {
+			checkAndAddLabelIfNeeded(node);
+			
+			writeIndents();
+			writer.print("while(1) {");
+			writeLineEnd(node.getBytecode(), false);
+		}
+	
+		private void writeIndents() {
+			Utils.writeIndents(writer, indentationLevel);
+		}
+		
+		private void writeIndents(int diff) {
+			Utils.writeIndents(writer, indentationLevel+diff);
+		}
+		
+		private void writePrimitiveBinArithOp(Code.BinArithKind kind, Type.Leaf type, ExpressionWriter lhs, ExpressionWriter rhs) {
+			writer.print('(');
+			switch(kind) {
+				case ADD:
+					lhs.writeExpression(writer);
+					writer.print(' ');
+					writer.print('+');
+					writer.print(' ');
+					rhs.writeExpression(writer);
+					break;
+				case SUB:
+					lhs.writeExpression(writer);
+					writer.print(' ');
+					writer.print('-');
+					writer.print(' ');
+					rhs.writeExpression(writer);
+					break;
+				case MUL:
+					lhs.writeExpression(writer);
+					writer.print(' ');
+					writer.print('*');
+					writer.print(' ');
+					rhs.writeExpression(writer);
+					break;
+				case DIV:
+					lhs.writeExpression(writer);
+					writer.print(' ');
+					writer.print('/');
+					writer.print(' ');
+					rhs.writeExpression(writer);
+					break;
+				case BITWISEAND:
+					lhs.writeExpression(writer);
+					writer.print(' ');
+					writer.print('&');
+					writer.print(' ');
+					rhs.writeExpression(writer);
+					break;
+				case BITWISEOR:
+					lhs.writeExpression(writer);
+					writer.print(' ');
+					writer.print('|');
+					writer.print(' ');
+					rhs.writeExpression(writer);
+					break;
+				case BITWISEXOR:
+					lhs.writeExpression(writer);
+					writer.print(' ');
+					writer.print('^');
+					writer.print(' ');
+					rhs.writeExpression(writer);
+					break;
+				case LEFTSHIFT:
+					lhs.writeExpression(writer);
+					writer.print(' ');
+					writer.print("<<");
+					writer.print(' ');
+					rhs.writeExpression(writer);
+					break;
+				case RIGHTSHIFT:
+					lhs.writeExpression(writer);
+					writer.print(' ');
+					writer.print(">>");
+					writer.print(' ');
+					rhs.writeExpression(writer);
+					break;
+				case RANGE:
+					throw new NotImplementedException();
+				case REM:
+					lhs.writeExpression(writer);
+					writer.print(' ');
+					writer.print("%");
+					writer.print(' ');
+					rhs.writeExpression(writer);
+			}
+			writer.print(')');
+		}
+		
+		private void writePrimitiveUnArithOp(UnArithKind kind, Leaf type, ExpressionWriter expressionWriter) {
+			writer.print('(');
+			switch(kind) {
+				case NEG:
+					writer.print('-');
+					expressionWriter.writeExpression(writer);
+					break;
+				case DENOMINATOR:
+					throw new NotSupportedByGPGPUException();
+				case NUMERATOR:
+					throw new NotSupportedByGPGPUException();
+			}
+			writer.print(')');
+		}
+		
+		private Comparator reverseComparison(Comparator op) {
+			switch(op) {
+				case SUBSET:
+					throw new NotImplementedException();
+				case SUBSETEQ:
+					throw new NotImplementedException();
+				case ELEMOF:
+					throw new NotImplementedException();
+				case EQ:
+					return Comparator.NEQ;
+				case GT:
+					return Comparator.LTEQ;
+				case GTEQ:
+					return Comparator.LT;
+				case LT:
+					return Comparator.GTEQ;
+				case LTEQ:
+					return Comparator.GT;
+				case NEQ:
+					return Comparator.EQ;
+			}
+			
+			// Can't ever get here, compiler wants it
+			throw new InternalError("Oops");
+		}
+
+		private boolean comparisonReversable(Comparator op) {
+			switch(op) {
+				case SUBSET:
+					throw new NotImplementedException();
+				case SUBSETEQ:
+					throw new NotImplementedException();
+				case ELEMOF:
+					throw new NotImplementedException();
+				case EQ:
+					return true;
+				case GT:
+					return true;
+				case GTEQ:
+					return true;
+				case LT:
+					return true;
+				case LTEQ:
+					return true;
+				case NEQ:
+					return true;
+			}
+			
+			// Can't ever get here, compiler wants it
+			throw new InternalError("Oops");
+		}
+		
+		private void writeComparitor(Comparator op, int leftOperand, int rightOperand) {
+			writer.print('(');
+			switch(op) {
+				case SUBSET:
+					throw new NotImplementedException();
+				case SUBSETEQ:
+					throw new NotImplementedException();
+				case ELEMOF:
+					throw new NotImplementedException();
+				case EQ:
+					typeWriter.writeRHS(leftOperand, writer);
+					writer.print(" == ");
+					typeWriter.writeRHS(rightOperand, writer);
+					break;
+				case GT:
+					typeWriter.writeRHS(leftOperand, writer);
+					writer.print(" > ");
+					typeWriter.writeRHS(rightOperand, writer);
+					break;
+				case GTEQ:
+					typeWriter.writeRHS(leftOperand, writer);
+					writer.print(" >= ");
+					typeWriter.writeRHS(rightOperand, writer);
+					break;
+				case LT:
+					typeWriter.writeRHS(leftOperand, writer);
+					writer.print(" < ");
+					typeWriter.writeRHS(rightOperand, writer);
+					break;
+				case LTEQ:
+					typeWriter.writeRHS(leftOperand, writer);
+					writer.print(" <= ");
+					typeWriter.writeRHS(rightOperand, writer);
+					break;
+				case NEQ:
+					typeWriter.writeRHS(leftOperand, writer);
+					writer.print(" != ");
+					typeWriter.writeRHS(rightOperand, writer);
+					break;
+			}
+			writer.print(')');
+		}
+		
+		private void writeLineEnd(Bytecode b) {
+			writeLineEnd(b, true);
+		}
+		
+		private void writeLineEnd(Bytecode b, boolean semicolon) {
+			if(semicolon) {
+				writer.print(';');
+			}
+			
+			if(WRITE_BYTECODES_TO_COMMENTS) {
+				writer.print(" // ");
+				writer.println(b.getCodeString());
+			}
+			else {
+				writer.print('\n');
+			}
+		}
 	}
 	
 	public void writeFunctionDecleration(String attributes, Type.Leaf type, String name, List<Argument> arguments, PrintWriter writer) {

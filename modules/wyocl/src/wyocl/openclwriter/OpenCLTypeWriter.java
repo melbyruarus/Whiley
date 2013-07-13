@@ -6,12 +6,13 @@ import java.util.HashMap;
 
 import wyil.lang.Type;
 import wyocl.filter.Argument;
+import wyocl.util.IndentedPrintWriter;
 
 public class OpenCLTypeWriter {
 	private static final String VAR_PREFIX = "register_";
 	private HashMap<Integer, VariableDefn> definedVariables = new HashMap<Integer, VariableDefn>();
 	private final StringWriter boilerPlateStringWriter = new StringWriter();
-	private final PrintWriter boilerPlateWriter = new PrintWriter(boilerPlateStringWriter);
+	private final PrintWriter boilerPlateWriter = new IndentedPrintWriter(boilerPlateStringWriter, 1);
 	
 	public interface ExpressionWriter {
 		public void writeExpression(PrintWriter writer);

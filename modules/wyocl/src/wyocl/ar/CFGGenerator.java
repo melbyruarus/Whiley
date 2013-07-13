@@ -14,21 +14,20 @@ import wybs.util.Pair;
 import wyil.lang.Block.Entry;
 import wyil.lang.Code;
 import wyil.lang.Constant;
-import wyocl.ar.utils.NotADAGException;
 
 public class CFGGenerator {
 	private static boolean DEBUG = false;
 	
 	public static CFGNode processEntries(List<Entry> entries, Set<CFGNode.ReturnNode> exitPoints, Set<CFGNode.UnresolvedTargetNode> unresolvedTargets) {
+		if(exitPoints == null) {
+			exitPoints = new HashSet<CFGNode.ReturnNode>();
+		}
+		if(unresolvedTargets == null) {
+			unresolvedTargets = new HashSet<CFGNode.UnresolvedTargetNode>();
+		}
+		
 		CFGNode rootNode = recursivlyConstructRoughCFG(entries, indexLabels(entries), new HashMap<Integer, CFGNode>(), new HashMap<String, CFGNode.LoopNode>(), 0, exitPoints, unresolvedTargets);
 		populateIdentifiers(rootNode, 0);
-		
-		try {
-			ARPrinter.print(rootNode);
-		} catch (NotADAGException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 		
 		return rootNode;
 	}
@@ -107,12 +106,12 @@ public class CFGGenerator {
 							
 							if(bytecode instanceof Bytecode.UnconditionalJump) {
 								Bytecode.UnconditionalJump jump = (Bytecode.UnconditionalJump)bytecode;
-								Integer target = labelIndexes.get(jump.target());
+								Integer target = labelIndexes.get(jump.getTargetLabel());
 								if(target != null) {
 									nextNode = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints, unresolvedTargets));
 								}
 								else {
-									nextNode = new CFGNode.UnresolvedTargetNode(jump.target());
+									nextNode = new CFGNode.UnresolvedTargetNode(jump.getTargetLabel());
 									unresolvedTargets.add((CFGNode.UnresolvedTargetNode)nextNode);
 								}
 							}
@@ -141,7 +140,7 @@ public class CFGGenerator {
 								nextNode = jumpNode;
 							}
 							else if(bytecode instanceof Bytecode.Return) {
-								CFGNode.ReturnNode jumpNode = new CFGNode.ReturnNode();
+								CFGNode.ReturnNode jumpNode = new CFGNode.ReturnNode((Bytecode.Return)bytecode);
 								exitPoints.add(jumpNode);
 								
 								nextNode = jumpNode;
@@ -149,7 +148,7 @@ public class CFGGenerator {
 							else if(bytecode instanceof Bytecode.Switch) {
 								CFGNode.MultiConditionalJumpNode jumpNode = new CFGNode.MultiConditionalJumpNode((Bytecode.Switch)bytecode);
 								if(DEBUG) {System.err.println("Creating node "+jumpNode);}
-								for(Pair<Constant, String> branch : jumpNode.branchTargets()) {
+								for(Pair<Constant, String> branch : jumpNode.getBranchTargets()) {
 									Integer target = labelIndexes.get(branch.second());
 									CFGNode targetNode;
 									if(target != null) {
@@ -162,12 +161,12 @@ public class CFGGenerator {
 									targetNode.previous.add(jumpNode);								
 									jumpNode.branches.add(new Pair<Constant, CFGNode>(branch.first(), targetNode));
 								}
-								Integer target = labelIndexes.get(jumpNode.defaultTarget());
+								Integer target = labelIndexes.get(jumpNode.getDefaultTarget());
 								if(target != null) {
 									jumpNode.defaultBranch = createLoopBreaks(loopEndIndex, i, target, recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints, unresolvedTargets));
 								}
 								else {
-									jumpNode.defaultBranch = new CFGNode.UnresolvedTargetNode(jumpNode.defaultTarget());
+									jumpNode.defaultBranch = new CFGNode.UnresolvedTargetNode(jumpNode.getDefaultTarget());
 									unresolvedTargets.add((CFGNode.UnresolvedTargetNode)jumpNode.defaultBranch);
 								}
 								jumpNode.defaultBranch.previous.add(jumpNode);
@@ -223,7 +222,7 @@ public class CFGGenerator {
 									loopNode.endNode.next = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, target, exitPoints, unresolvedTargets);
 								}
 								else {
-									loopNode.endNode.next = new CFGNode.ReturnNode();
+									loopNode.endNode.next = new CFGNode.ReturnNode(null);
 									exitPoints.add((CFGNode.ReturnNode)loopNode.endNode.next);
 								}
 							}
@@ -250,7 +249,7 @@ public class CFGGenerator {
 				}
 			}
 			
-			CFGNode.ReturnNode end = new CFGNode.ReturnNode();
+			CFGNode.ReturnNode end = new CFGNode.ReturnNode(null);
 			exitPoints.add(end);
 			
 			if(node.body.instructions.size() > 0) {
@@ -271,7 +270,7 @@ public class CFGGenerator {
 		List<CFGNode.LoopNode> loopsBreakingFrom = new ArrayList<CFGNode.LoopNode>();
 		
 		for(CFGNode.LoopNode n : loops) {
-			if(jumpFromIndex > n.startIndex && jumpToIndex > n.endIndex) {
+			if(jumpFromIndex > n.startIndex && jumpFromIndex < n.endIndex && jumpToIndex > n.endIndex) {
 				loopsBreakingFrom.add(n);
 			}
 		}
@@ -301,6 +300,7 @@ public class CFGGenerator {
 					last.previous.add(loopBreakNode);
 				}
 				last = loopBreakNode;
+				n.breakNodes.add(loopBreakNode);
 			}
 			
 			return last;
