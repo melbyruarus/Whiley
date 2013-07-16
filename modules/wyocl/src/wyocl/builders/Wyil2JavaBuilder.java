@@ -5,9 +5,8 @@ import java.util.HashMap;
 
 import wyil.lang.Block;
 import wyil.lang.WyilFile;
-import wyil.lang.Block.Entry;
-import wyjvm.attributes.LineNumberTable;
 import wyjvm.attributes.Code.Handler;
+import wyjvm.attributes.LineNumberTable;
 import wyjvm.lang.Bytecode;
 import wyjvm.lang.ClassFile;
 import wyocl.filter.LoopFilter;
@@ -36,6 +35,7 @@ public class Wyil2JavaBuilder extends wyjc.Wyil2JavaBuilder {
 		return result;
 	}
 	
+	@Override
 	protected ClassFile.Method build(int caseNum, WyilFile.Case mcase,
 			WyilFile.MethodDeclaration method, HashMap<JvmConstant,Integer> constants) {
 		loopFilter.beginMethod(method);
@@ -44,34 +44,16 @@ public class Wyil2JavaBuilder extends wyjc.Wyil2JavaBuilder {
 		return ret;
 	}
 	
+	@Override
 	public void translate(Block blk, int freeSlot,
 			HashMap<JvmConstant, Integer> constants,
 			ArrayList<Handler> handlers,
 			ArrayList<LineNumberTable.Entry> lineNumbers,
 			ArrayList<Bytecode> bytecodes) {
-		loopFilter.beginBlock(blk);
-		super.translate(blk, freeSlot, constants, handlers, lineNumbers, bytecodes);
-		loopFilter.endBlock();
-	}
-	
-	protected int translate(Entry entry, int freeSlot,
-			HashMap<JvmConstant, Integer> constants,
-			ArrayList<UnresolvedHandler> handlers, ArrayList<Bytecode> bytecodes) {		
-		switch(loopFilter.filter(entry)) {
-			case SKIP:
-				return freeSlot;
-			case DEFAULT:
-				return super.translate(entry, freeSlot, constants, handlers, bytecodes);
-			case FILTER_RESULTS_READY:
-				// Replay all the replacement entries through our superclasses implementation.
-				int replacementFreeSlot = freeSlot;
-				for(Entry replacementEntry : loopFilter.getReplacementEntries()) {
-					replacementFreeSlot = super.translate(replacementEntry, replacementFreeSlot, constants, handlers, bytecodes);
-				}
-				return replacementFreeSlot;
+		Block newBlock = loopFilter.processBlock(blk, null, null);
+		if(newBlock != null) {
+			blk = newBlock;
 		}
-		
-		// I don't see how we can possibly get here? Compiler wants it however.
-		return freeSlot;
+		super.translate(blk, freeSlot, constants, handlers, lineNumbers, bytecodes);
 	}
 }

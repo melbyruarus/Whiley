@@ -129,7 +129,7 @@ public class DFGGenerator {
 	}
 	
 	public static void clearDFG(CFGNode rootNode) {
-		CFGIterator.iterateCFGForwards(new CFGIterator.CFGNodeCallback() {
+		CFGIterator.iterateCFGFlow(new CFGIterator.CFGNodeCallback() {
 			@Override
 			public boolean process(CFGNode node) {
 				node.clearDFGNodes();
@@ -234,7 +234,7 @@ public class DFGGenerator {
 	}
 
 	private static void collectAllDFGNodes(CFGNode root, final Set<DFGNode> allDFGNodes) {
-		CFGIterator.iterateCFGForwards(new CFGIterator.CFGNodeCallback() {
+		CFGIterator.iterateCFGFlow(new CFGIterator.CFGNodeCallback() {
 			@Override
 			public boolean process(CFGNode node) {
 				node.gatherDFGNodesInto(allDFGNodes);

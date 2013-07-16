@@ -18,7 +18,7 @@ public class CFGIterator {
 		boolean process(CFGNode node);
 	}
 	
-	public static void iterateCFGForwards(CFGNodeCallback callback, CFGNode start, Set<CFGNode> terminate) {
+	public static void iterateCFGFlow(CFGNodeCallback callback, CFGNode start, Set<CFGNode> terminate) {
 		Set<CFGNode> fringe = new HashSet<CFGNode>();
 		Set<CFGNode> processed = new HashSet<CFGNode>();
 		if(terminate != null) {
@@ -43,6 +43,31 @@ public class CFGIterator {
 		}
 	}
 	
+	public static void iterateCFGScope(CFGNodeCallback callback, CFGNode start, Set<CFGNode> terminate) {
+		Set<CFGNode> fringe = new HashSet<CFGNode>();
+		Set<CFGNode> processed = new HashSet<CFGNode>();
+		if(terminate != null) {
+			processed.addAll(terminate);
+		}
+		
+		fringe.add(start);
+		
+		while(!fringe.isEmpty()) {
+			CFGNode node = fringe.iterator().next();
+			processed.add(node);
+			fringe.remove(node);
+						
+			if(!callback.process(node)) {
+				return;
+			}
+			
+			Set<CFGNode> next = new HashSet<CFGNode>();
+			node.getScopeNextNodes(next);
+			next.removeAll(processed);
+			fringe.addAll(next);
+		}
+	}
+	
 	/**
 	 * Determine if one node occurs on the path between two others
 	 * 
@@ -58,7 +83,7 @@ public class CFGIterator {
 		Set<CFGNode> terminate = new HashSet<CFGNode>();
 		terminate.add(two);
 		
-		iterateCFGForwards(new CFGNodeCallback() {
+		iterateCFGFlow(new CFGNodeCallback() {
 			@Override
 			public boolean process(CFGNode aNode) {
 				if(aNode == node) {

@@ -89,7 +89,7 @@ public class CFGGenerator {
 		while(earlyFinish[0]) {
 			earlyFinish[0] = false;
 
-			CFGIterator.iterateCFGForwards(new CFGIterator.CFGNodeCallback() {
+			CFGIterator.iterateCFGFlow(new CFGIterator.CFGNodeCallback() {
 				@Override
 				public boolean process(CFGNode node) {
 					if(node instanceof CFGNode.ForAllLoopNode) {

@@ -763,6 +763,18 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		public void getCheckedRegisters(Set<Integer> checkedRegisters) {
 			checkedRegisters.add(code.operand);
 		}
+
+		public Type getType() {
+			return code.type;
+		}
+
+		public int getTestedOperand() {
+			return code.operand;
+		}
+
+		public Type getTypeOperand() {
+			return code.rightOperand;
+		}
 	}
 	
 	public static class Switch extends Bytecode implements Bytecode.Jump, Bytecode.GPUSupportedBytecode {
@@ -785,6 +797,10 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 
 		public int getCheckedRegister() {
 			return code.operand;
+		}
+
+		public Type getType() {
+			return code.type;
 		}
 	}
 	

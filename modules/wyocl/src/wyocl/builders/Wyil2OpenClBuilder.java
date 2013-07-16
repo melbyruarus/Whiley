@@ -47,10 +47,10 @@ import wyocl.ar.CFGGenerator;
 import wyocl.ar.CFGNode;
 import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator;
-import wyocl.ar.utils.CFGIterator.Entry;
 import wyocl.ar.utils.NotADAGException;
 import wyocl.filter.Argument;
 import wyocl.filter.LoopFilter;
+import wyocl.filter.OpenCLKernelInvocationDescription;
 import wyocl.lang.ClFile;
 import wyocl.openclwriter.NotSupportedByGPGPUException;
 import wyocl.openclwriter.OpenCLOpWriter;
@@ -166,26 +166,15 @@ public class Wyil2OpenClBuilder implements Builder {
 	}
 
 	protected void write(Block b, WyilFile.Case c, WyilFile.MethodDeclaration method, HashSet<String> declaredMethods, PrintWriter forwardDecpWriter, HashSet<String> invokedFunctions, PrintWriter kernelpWriter) {
-		loopFilter.beginBlock(b);
-		for(Block.Entry e : b) {
-			write(e, c, method, declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
-		}
-		loopFilter.endBlock();
-	}
-
-	protected void write(Block.Entry entry, WyilFile.Case c, WyilFile.MethodDeclaration method, HashSet<String> declaredMethods, PrintWriter forwardDecpWriter, HashSet<String> invokedFunctions, PrintWriter kernelpWriter) {
-		switch(loopFilter.filter(entry)) {
-			case SKIP:
-			case DEFAULT:
-				break;
-			case FILTER_RESULTS_READY:
-				writeOpenCLKernel(loopFilter.getLoopNode(), loopFilter.getLoopBody(), loopFilter.getKernelArguments(), declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
-				break;
+		Map<CFGNode.LoopNode, OpenCLKernelInvocationDescription> kernels = new HashMap<CFGNode.LoopNode, OpenCLKernelInvocationDescription>();
+		loopFilter.processBlock(b, kernels, null);
+		for(OpenCLKernelInvocationDescription o : kernels.values()) {
+			writeOpenCLKernel(o, declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
 		}
 	}
 
 	protected static int kid = 0;
-	private void writeOpenCLKernel(CFGNode.LoopNode loopNode, List<Entry> loopBody, List<Argument> kernelArguments, final HashSet<String> declaredMethods, final PrintWriter forwardDecpWriter, final HashSet<String> invokedFunctions, PrintWriter kernelpWriter) {
+	private void writeOpenCLKernel(OpenCLKernelInvocationDescription kernelDescription, final HashSet<String> declaredMethods, final PrintWriter forwardDecpWriter, final HashSet<String> invokedFunctions, PrintWriter kernelpWriter) {
 		final OpenCLOpWriter invokedFunctionDeclerationOpWriter[] = new OpenCLOpWriter[1];
 		final HashSet<String> writingMethods = new HashSet<String>();
 
@@ -274,10 +263,10 @@ public class Wyil2OpenClBuilder implements Builder {
 		invokedFunctionDeclerationOpWriter[0] = new OpenCLOpWriter(functionTranslator[0]);
 		OpenCLOpWriter kernelOpWriter = new OpenCLOpWriter(functionTranslator[0]);
 
-		kernelOpWriter.writeFunctionDecleration("__kernel", Type.T_VOID, "whiley_gpgpu_func_"+kid, kernelArguments, kernelpWriter);
+		kernelOpWriter.writeFunctionDecleration("__kernel", Type.T_VOID, "whiley_gpgpu_func_"+kid, kernelDescription.kernelArguments, kernelpWriter);
 
 		kernelpWriter.print(" {\n");
-		kernelOpWriter.writeLoopBodyAsKernel(loopNode, loopBody, kernelpWriter);
+		kernelOpWriter.writeLoopBodyAsKernel(kernelDescription.loopNode, kernelDescription.loopBody, kernelpWriter);
 		kernelpWriter.println("}");
 	}
 }
