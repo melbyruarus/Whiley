@@ -25,6 +25,7 @@
 
 package whiley.gpgpu;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -35,12 +36,21 @@ import java.util.List;
 import whiley.gpgpu.OpenCL.*;
 import whiley.gpgpu.OpenCL.Devices.*;
 import whiley.gpgpu.OpenCL.Events.*;
+import whiley.gpgpu.OpenCL.Exceptions.CommandQueueInitilizationException;
+import whiley.gpgpu.OpenCL.Exceptions.ContextInitilizationException;
+import whiley.gpgpu.OpenCL.Exceptions.DeviceFetchException;
 import whiley.gpgpu.OpenCL.Exceptions.KernelArgumentException;
+import whiley.gpgpu.OpenCL.Exceptions.KernelExecutionException;
+import whiley.gpgpu.OpenCL.Exceptions.KernelInitilizationException;
 import whiley.gpgpu.OpenCL.Exceptions.MemoryException;
+import whiley.gpgpu.OpenCL.Exceptions.ProgramCompilationException;
+import whiley.gpgpu.OpenCL.Exceptions.ProgramInitilizationException;
+import whiley.gpgpu.OpenCL.Exceptions.ProgramReInitilizationException;
 import wyjc.runtime.WyList;
 import wyjc.runtime.WyRat;
 import wyjc.runtime.WyTuple;
 
+import org.jocl.CL;
 import org.jocl.Pointer;
 import org.jocl.Sizeof;
 
@@ -87,12 +97,31 @@ public class Util$native {
 			int argumentCount = 0;
 			// Setup all the arguments
 			for (Object item : arguments) {
-				setArgument(argumentCount, k, q, item, memoryArguments, null, writeEvents, byteOrder);
+				try {
+					setArgument(argumentCount, k, q, item, memoryArguments, null, writeEvents, byteOrder);
+				} catch (KernelArgumentException e) {
+					if(e.status == CL.CL_INVALID_ARG_INDEX) {
+						throw new IllegalArgumentException("Incorrect number of arguments to kernel, too many specified, expected " + argumentCount, e);
+					}
+					else {
+						throw e;
+					}
+				}
 				argumentCount++;
 			}
-
+						
 			Event computeEvent = new Event();
-			k.enqueueKernelWithWorkSizes(q, 1, new long[] { start }, new long[] { end }, null, writeEvents, computeEvent);
+			try {
+				k.enqueueKernelWithWorkSizes(q, 1, new long[] { start }, new long[] { end }, null, writeEvents, computeEvent);
+			}
+			catch(KernelExecutionException e) {
+				if(e.status == CL.CL_INVALID_KERNEL_ARGS) {
+					throw new IllegalArgumentException("Incorrect number of arguments to kernel, only got " + argumentCount + " expecting more", e);
+				}
+				else {
+					throw e;
+				}
+			}
 
 			EventList readEvents = new EventList();
 			HashSet<Runnable> onCompletions = new HashSet<Runnable>();
@@ -124,10 +153,28 @@ public class Util$native {
 			c.release();
 
 			return resultArray;
-		} catch (Throwable t) {
-			t.printStackTrace();
-
-			return null; // This will crash the caller
+		} catch (DeviceFetchException e) {
+			throw new RuntimeException(e);
+		} catch (ContextInitilizationException e) {
+			throw new RuntimeException(e);
+		} catch (CommandQueueInitilizationException e) {
+			throw new RuntimeException(e);
+		} catch (ProgramInitilizationException e) {
+			throw new RuntimeException(e);
+		} catch (ProgramReInitilizationException e) {
+			throw new RuntimeException(e);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		} catch (ProgramCompilationException e) {
+			throw new RuntimeException(e);
+		} catch (KernelInitilizationException e) {
+			throw new RuntimeException(e);
+		} catch (KernelExecutionException e) {
+			throw new RuntimeException(e);
+		} catch (MemoryException e) {
+			throw new RuntimeException(e);
+		} catch (KernelArgumentException e) {
+			throw new RuntimeException(e);
 		}
 	}
 	
@@ -137,7 +184,7 @@ public class Util$native {
 		tempList.add(sourceList);
 		tempList.addAll(arguments);
 		
-		WyList result = executeWYGPUKernelOverRange(moduleName, arguments, 0, sourceList.size());
+		WyList result = executeWYGPUKernelOverRange(moduleName, tempList, 0, sourceList.size());
 		
 		result.remove(0);
 		

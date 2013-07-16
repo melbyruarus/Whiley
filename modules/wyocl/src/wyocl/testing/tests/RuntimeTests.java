@@ -19,4 +19,6 @@ public class RuntimeTests extends TestHarness {
 	@Test public void Remainder() { runTest("Remainder"); }
 	@Test public void Logic() { runTest("Logic"); }
 	@Test public void Mandelbrot() { runTest("mandelbrot_with_hash"); }
+	@Test public void ForallOptimisationNotPossible() { runTest("ForallOptimisationNotPossible"); }
+	@Test public void ForallOptimisationPossible() { runTest("ForallOptimisationPossible"); }
 }

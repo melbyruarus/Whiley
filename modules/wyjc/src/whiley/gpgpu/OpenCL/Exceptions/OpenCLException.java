@@ -5,6 +5,8 @@ import static org.jocl.CL.*;
 public abstract class OpenCLException extends Exception {
 	private static final long serialVersionUID = 1L;
 	
+	public final int status;
+	
 	public static String stringFromErrorCode(int i) {
 		switch(i) {
 			case CL_SUCCESS:
@@ -138,9 +140,11 @@ public abstract class OpenCLException extends Exception {
 	
 	public OpenCLException(int i, String string) {
 		super(stringFromErrorCode(i) + ": " + string);
+		status = i;
 	}
 
 	public OpenCLException(String string) {
 		super(string);
+		status = Integer.MAX_VALUE;
 	}
 }
