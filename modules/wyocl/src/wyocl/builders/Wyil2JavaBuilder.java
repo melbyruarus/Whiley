@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 import wyil.lang.Block;
-import wyil.lang.Code;
 import wyil.lang.WyilFile;
 import wyil.lang.Block.Entry;
 import wyjvm.attributes.LineNumberTable;
@@ -57,9 +56,7 @@ public class Wyil2JavaBuilder extends wyjc.Wyil2JavaBuilder {
 	
 	protected int translate(Entry entry, int freeSlot,
 			HashMap<JvmConstant, Integer> constants,
-			ArrayList<UnresolvedHandler> handlers, ArrayList<Bytecode> bytecodes) {
-		Code code = entry.code;
-		
+			ArrayList<UnresolvedHandler> handlers, ArrayList<Bytecode> bytecodes) {		
 		switch(loopFilter.filter(entry)) {
 			case SKIP:
 				return freeSlot;

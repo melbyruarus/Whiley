@@ -61,10 +61,8 @@ public class Util$native {
 		}
 	}
 
-	public static WyList executeWYGPUKernel(String moduleName, WyList arguments) {
+	public static WyList executeWYGPUKernelOverRange(String moduleName, WyList arguments, int start, int end) {
 		try {
-			long start = System.currentTimeMillis();
-
 			DeviceList devices = DeviceList.devicesOfType(DeviceType.GPU, 1);
 			if (devices.count() < 1) {
 				System.err.println("Unable to find a device");
@@ -94,8 +92,7 @@ public class Util$native {
 			}
 
 			Event computeEvent = new Event();
-			WyList sourceList = (WyList) arguments.get(0); // FIXME: temporary
-			k.enqueueKernelWithWorkSizes(q, 1, null, new long[] { sourceList.size() }, null, writeEvents, computeEvent);
+			k.enqueueKernelWithWorkSizes(q, 1, new long[] { start }, new long[] { end }, null, writeEvents, computeEvent);
 
 			EventList readEvents = new EventList();
 			HashSet<Runnable> onCompletions = new HashSet<Runnable>();
@@ -132,6 +129,19 @@ public class Util$native {
 
 			return null; // This will crash the caller
 		}
+	}
+	
+	@SuppressWarnings("unchecked")
+	public static WyList executeWYGPUKernelOverArray(String moduleName, WyList arguments, WyList sourceList) {
+		WyList tempList = new WyList();
+		tempList.add(sourceList);
+		tempList.addAll(arguments);
+		
+		WyList result = executeWYGPUKernelOverRange(moduleName, arguments, 0, sourceList.size());
+		
+		result.remove(0);
+		
+		return result;
 	}
 
 	private static void getArgument(CommandQueue q, GPUReferenceArgument item, Event waitOn, EventList readEvents, HashSet<Runnable> onCompletions, ByteOrder byteOrder, WyList resultArray) throws MemoryException {

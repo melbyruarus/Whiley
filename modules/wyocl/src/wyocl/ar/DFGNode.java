@@ -6,17 +6,20 @@ import java.util.Set;
 import wyil.lang.Type;
 
 public class DFGNode {
+	public interface DFGNodeCause {
+	}
+	
 	public final Set<DFGNode> lastModified = new HashSet<DFGNode>();
 	public final Set<DFGNode> nextModified = new HashSet<DFGNode>();
 	public final Set<DFGNode> lastRead = new HashSet<DFGNode>();
 	public final Set<DFGNode> nextRead = new HashSet<DFGNode>();
 	public final Set<DFGNode> lastReadOrWrite = new HashSet<DFGNode>();
-	public final Bytecode cause;
+	public final DFGNodeCause cause;
 	public final int register;
 	public final boolean isAssignment;
 	public Type type;
 	
-	public DFGNode(Bytecode cause, int register, Type type, boolean isAssignment) {
+	public DFGNode(DFGNodeCause cause, int register, Type type, boolean isAssignment) {
 		this.cause = cause;
 		this.register = register;
 		this.type = type;

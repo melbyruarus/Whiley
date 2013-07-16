@@ -13,25 +13,188 @@ import java.util.Set;
 import wybs.util.Pair;
 import wyil.lang.Block.Entry;
 import wyil.lang.Code;
+import wyil.lang.Code.BinArithKind;
 import wyil.lang.Constant;
+import wyil.lang.Type;
+import wyocl.ar.CFGNode.ForAllLoopNode;
+import wyocl.ar.utils.CFGIterator;
+import wyocl.ar.utils.NotADAGException;
 
 public class CFGGenerator {
 	private static boolean DEBUG = false;
-	
-	public static CFGNode processEntries(List<Entry> entries, Set<CFGNode.ReturnNode> exitPoints, Set<CFGNode.UnresolvedTargetNode> unresolvedTargets) {
+
+	// TODO: create task
+
+	public static CFGNode processEntries(List<Entry> entries, Set<CFGNode.ReturnNode> exitPoints, Set<CFGNode.UnresolvedTargetNode> unresolvedTargets, Map<Integer, DFGNode> argumentRegisters) {
 		if(exitPoints == null) {
 			exitPoints = new HashSet<CFGNode.ReturnNode>();
 		}
 		if(unresolvedTargets == null) {
 			unresolvedTargets = new HashSet<CFGNode.UnresolvedTargetNode>();
 		}
-		
+
 		CFGNode rootNode = recursivlyConstructRoughCFG(entries, indexLabels(entries), new HashMap<Integer, CFGNode>(), new HashMap<String, CFGNode.LoopNode>(), 0, exitPoints, unresolvedTargets);
 		populateIdentifiers(rootNode, 0);
-		
+
+		if(DEBUG) {
+			try {
+				System.err.println("------------ Begin CFG Printing (1/3) ------------");
+				ARPrinter.print(rootNode);
+				System.err.println("------------- End CFG Printing (1/3) -------------");
+			} catch (NotADAGException e1) {
+				e1.printStackTrace();
+			}
+		}
+		DFGGenerator.populateDFG(rootNode, argumentRegisters);
+		if(DEBUG) {
+			try {
+				System.err.println("------------ Begin CFG Printing (2/3) ------------");
+				ARPrinter.print(rootNode);
+				System.err.println("------------- End CFG Printing (2/3) -------------");
+			} catch (NotADAGException e1) {
+				e1.printStackTrace();
+			}
+		}
+
+		analyseRangedBasedForAllLoops(rootNode, argumentRegisters);
+		performConstantPropogation(rootNode);
+		analyseDFGForDeadCode(rootNode);
+
+		if(DEBUG) {
+			try {
+				System.err.println("------------ Begin CFG Printing (3/3) ------------");
+				ARPrinter.print(rootNode);
+				System.err.println("------------- End CFG Printing (3/3) -------------");
+			} catch (NotADAGException e1) {
+				e1.printStackTrace();
+			}
+		}
+
 		return rootNode;
 	}
-	
+
+	private static void performConstantPropogation(CFGNode rootNode) {
+		// FIXME: implement
+	}
+
+	private static void analyseDFGForDeadCode(CFGNode rootNode) {
+		// FIXME: implement
+	}
+
+	private static void analyseRangedBasedForAllLoops(final CFGNode rootNode, final Map<Integer, DFGNode> argumentRegisters) {
+		// FIXME: need dummy node
+
+		final boolean[] earlyFinish = new boolean[1];
+		earlyFinish[0] = true;
+		while(earlyFinish[0]) {
+			earlyFinish[0] = false;
+
+			CFGIterator.iterateCFGForwards(new CFGIterator.CFGNodeCallback() {
+				@Override
+				public boolean process(CFGNode node) {
+					if(node instanceof CFGNode.ForAllLoopNode) {
+						CFGNode.ForAllLoopNode loop = (CFGNode.ForAllLoopNode)node;
+						DFGNode sourceDFGNode = loop.getBytecode().getSourceDFGNode();
+						if(sourceDFGNode.type instanceof Type.EffectiveList) {
+							boolean allAreRanges = true;
+							Set<Bytecode.Binary> listCreationBytecodes = new HashSet<Bytecode.Binary>();
+
+							for(DFGNode lastModification : sourceDFGNode.lastModified) {
+								if(lastModification.cause instanceof Bytecode.Binary) {
+									Bytecode.Binary bin = (Bytecode.Binary)lastModification.cause;
+									if(bin.getArithKind().equals(BinArithKind.RANGE) &&
+											bin.readDFGNodes.get(bin.getLeftOperand()).type instanceof Type.Int &&
+											bin.readDFGNodes.get(bin.getRightOperand()).type instanceof Type.Int) {
+										listCreationBytecodes.add(bin);
+									}
+									else {
+										allAreRanges = false;
+									}
+								}
+								else {
+									allAreRanges = false;
+								}
+							}
+
+							if(allAreRanges) {
+								replaceForAllWithFor(loop, listCreationBytecodes);
+								earlyFinish[0] = true;
+
+
+								populateIdentifiers(rootNode, 0);
+								DFGGenerator.clearDFG(rootNode);
+								DFGGenerator.populateDFG(rootNode, argumentRegisters);
+
+								return false; // Have to stop iterating as we have just modified the CFG, outer loop will restart iteration
+							}
+						}
+					}
+					return true;
+				}
+			}, rootNode, null);
+		}
+	}
+
+	private static boolean replaceForAllWithFor(ForAllLoopNode loop, Set<Bytecode.Binary> listCreationBytecodes) {
+		Type.Leaf indexType = (Type.Leaf)loop.getBytecode().getIndexType();
+
+		// FIXME: implement free register tracking
+		int lowerRegister = (int) (Math.random()*10000 + 10000);
+		int upperRegister = lowerRegister+1;
+
+		for(Bytecode.Binary bytecode : listCreationBytecodes) {
+			List<Bytecode> bytecodes = ((CFGNode.VanillaCFGNode)bytecode.cfgNode).body.instructions;
+			int index = bytecodes.indexOf(bytecode);
+			if(index < 0) {
+				throw new InternalError("Bytecode not contained in bytecode.cfgNode.body.instructions");
+			}
+
+			bytecodes.add(index, new Bytecode.Assign(Code.Assign(indexType, lowerRegister, bytecode.getLeftOperand())));
+			bytecodes.add(index, new Bytecode.Assign(Code.Assign(indexType, upperRegister, bytecode.getRightOperand())));
+		}
+
+		CFGNode.ForLoopNode forLoop = new CFGNode.ForLoopNode(loop.getBytecode().getIndexRegister(),
+											indexType, lowerRegister, upperRegister, loop.loopEndLabel(),
+											loop.startIndex, loop.endIndex, loop.getCausialWYILLangBytecode());
+
+		forLoop.body = loop.body;
+		loop.body = null;
+		forLoop.body.previous.remove(loop);
+		forLoop.body.previous.add(forLoop);
+
+		for(CFGNode.LoopBreakNode oldNode : loop.breakNodes) {
+			CFGNode.LoopBreakNode newNode = new CFGNode.LoopBreakNode(forLoop);
+			newNode.previous.addAll(oldNode.previous);
+			for(CFGNode n : newNode.previous) {
+				n.retargetNext(oldNode, newNode);
+			}
+			oldNode.previous.clear();
+			newNode.next = oldNode.next;
+			oldNode.next = null;
+			forLoop.breakNodes.add(newNode);
+		}
+		loop.breakNodes.clear();
+
+		forLoop.endNode.next = loop.endNode.next;
+		loop.endNode.next = null;
+		forLoop.endNode.next.previous.remove(loop.endNode);
+		forLoop.endNode.next.previous.add(forLoop.endNode);
+		forLoop.endNode.previous.addAll(loop.endNode.previous);
+		for(CFGNode p : forLoop.endNode.previous) {
+			p.retargetNext(loop.endNode, forLoop.endNode);
+		}
+		loop.endNode.previous.clear();
+
+
+		forLoop.previous.addAll(loop.previous);
+		loop.previous.clear();
+		for(CFGNode n : forLoop.previous) {
+			n.retargetNext(loop, forLoop);
+		}
+
+		return true;
+	}
+
 	private static int populateIdentifiers(CFGNode node, int id) {
 		node.identifier = id;
 		id++;
@@ -45,7 +208,7 @@ public class CFGGenerator {
 
 	private static Map<String, Integer> indexLabels(List<Entry> entries) {
 		Map<String, Integer> map = new HashMap<String, Integer>();
-		
+
 		int index = 0;
 		for(Entry e : entries) {
 			if(e.code instanceof Code.Label) {
@@ -54,7 +217,7 @@ public class CFGGenerator {
 			}
 			index++;
 		}
-		
+
 		return map;
 	}
 
@@ -67,16 +230,16 @@ public class CFGGenerator {
 		else {
 			CFGNode.VanillaCFGNode node = new CFGNode.VanillaCFGNode();
 			if(DEBUG) {System.err.println("Creating node "+node);}
-			
+
 			for(int i=processingIndex;i<entries.size();i++) {
 				if(node.body.instructions.size() > 0) {
 					alreadyProcessedEntries.put(processingIndex, node);
 				}
-				
+
 				Bytecode bytecode = Bytecode.bytecodeForCode(entries.get(i).code);
-				
+
 				if(DEBUG) {System.err.println("Processing code "+bytecode);}
-				
+
 				if(bytecode != null) {
 					if(bytecode instanceof Bytecode.Control) {
 						if(bytecode instanceof Bytecode.LoopEnd) {
@@ -103,7 +266,7 @@ public class CFGGenerator {
 						}
 						else if(bytecode instanceof Bytecode.Jump) {
 							CFGNode nextNode = null;
-							
+
 							if(bytecode instanceof Bytecode.UnconditionalJump) {
 								Bytecode.UnconditionalJump jump = (Bytecode.UnconditionalJump)bytecode;
 								Integer target = labelIndexes.get(jump.getTargetLabel());
@@ -136,13 +299,13 @@ public class CFGGenerator {
 									unresolvedTargets.add((CFGNode.UnresolvedTargetNode)jumpNode.conditionUnmet);
 								}
 								jumpNode.conditionUnmet.previous.add(jumpNode);
-								
+
 								nextNode = jumpNode;
 							}
 							else if(bytecode instanceof Bytecode.Return) {
 								CFGNode.ReturnNode jumpNode = new CFGNode.ReturnNode((Bytecode.Return)bytecode);
 								exitPoints.add(jumpNode);
-								
+
 								nextNode = jumpNode;
 							}
 							else if(bytecode instanceof Bytecode.Switch) {
@@ -158,7 +321,7 @@ public class CFGGenerator {
 										targetNode = new CFGNode.UnresolvedTargetNode(branch.second());
 										unresolvedTargets.add((CFGNode.UnresolvedTargetNode)targetNode);
 									}
-									targetNode.previous.add(jumpNode);								
+									targetNode.previous.add(jumpNode);
 									jumpNode.branches.add(new Pair<Constant, CFGNode>(branch.first(), targetNode));
 								}
 								Integer target = labelIndexes.get(jumpNode.getDefaultTarget());
@@ -170,10 +333,10 @@ public class CFGGenerator {
 									unresolvedTargets.add((CFGNode.UnresolvedTargetNode)jumpNode.defaultBranch);
 								}
 								jumpNode.defaultBranch.previous.add(jumpNode);
-								
+
 								nextNode = jumpNode;
 							}
-							
+
 							if(node.body.instructions.size() == 0) {
 								return nextNode;
 							}
@@ -194,19 +357,19 @@ public class CFGGenerator {
 							else {
 								end = Integer.MAX_VALUE;
 							}
-							
-							if(bytecode instanceof Bytecode.For){ 
-								loopNode = new CFGNode.ForLoopNode((Bytecode.For)loopBytecode, i, end);
+
+							if(bytecode instanceof Bytecode.ForAll){
+								loopNode = new CFGNode.ForAllLoopNode((Bytecode.ForAll)loopBytecode, i, end);
 							}
-							else { 
+							else {
 								loopNode = new CFGNode.WhileLoopNode((Bytecode.While)loopBytecode, i, end);
 							}
-							
+
 							if(DEBUG) {System.err.println("Creating node "+loopNode);}
-							
+
 							alreadyProcessedEntries.put(end, loopNode.endNode);
 							loopEndIndex.put(loopBytecode.loopEndLabel(), loopNode);
-							
+
 							if(i+1 < entries.size()) {
 								loopNode.body = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, i+1, exitPoints, unresolvedTargets);
 							}
@@ -231,7 +394,7 @@ public class CFGGenerator {
 								unresolvedTargets.add((CFGNode.UnresolvedTargetNode)loopNode.endNode.next);
 							}
 							loopNode.endNode.next.previous.add(loopNode.endNode);
-							
+
 							if(node.body.instructions.size() == 0) {
 								return loopNode;
 							}
@@ -248,14 +411,14 @@ public class CFGGenerator {
 					}
 				}
 			}
-			
+
 			CFGNode.ReturnNode end = new CFGNode.ReturnNode(null);
 			exitPoints.add(end);
-			
+
 			if(node.body.instructions.size() > 0) {
 				node.next = end;
 				end.previous.add(node);
-				
+
 				return node;
 			}
 			else {
@@ -268,13 +431,13 @@ public class CFGGenerator {
 		if(DEBUG) {System.err.println("Checking for loop breaks");}
 		Collection<CFGNode.LoopNode> loops = loopEndIndex.values();
 		List<CFGNode.LoopNode> loopsBreakingFrom = new ArrayList<CFGNode.LoopNode>();
-		
+
 		for(CFGNode.LoopNode n : loops) {
 			if(jumpFromIndex > n.startIndex && jumpFromIndex < n.endIndex && jumpToIndex > n.endIndex) {
 				loopsBreakingFrom.add(n);
 			}
 		}
-		
+
 		if(loopsBreakingFrom.size() == 0) {
 			if(DEBUG) {System.err.println("Didn't find any");}
 			return cfgAfter;
@@ -287,7 +450,7 @@ public class CFGGenerator {
 					return arg1.endIndex - arg0.endIndex;
 				}
 			});
-			
+
 			CFGNode.LoopBreakNode last = null;
 			for(CFGNode.LoopNode n : loopsBreakingFrom) {
 				CFGNode.LoopBreakNode loopBreakNode = new CFGNode.LoopBreakNode(n);
@@ -302,7 +465,7 @@ public class CFGGenerator {
 				last = loopBreakNode;
 				n.breakNodes.add(loopBreakNode);
 			}
-			
+
 			return last;
 		}
 	}

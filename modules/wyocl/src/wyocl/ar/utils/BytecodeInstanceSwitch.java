@@ -6,7 +6,7 @@ import wyocl.ar.Bytecode.Binary;
 import wyocl.ar.Bytecode.ComparisonBasedJump;
 import wyocl.ar.Bytecode.ConstLoad;
 import wyocl.ar.Bytecode.Convert;
-import wyocl.ar.Bytecode.For;
+import wyocl.ar.Bytecode.ForAll;
 import wyocl.ar.Bytecode.Invoke;
 import wyocl.ar.Bytecode.Label;
 import wyocl.ar.Bytecode.LengthOf;
@@ -34,7 +34,7 @@ public class BytecodeInstanceSwitch {
 		void visitLengthOf(LengthOf b);
 		void visitTupleLoad(TupleLoad b);
 		void visitUpdate(Update b);
-		void visitFor(For b);
+		void visitFor(ForAll b);
 		void visitWhile(While b);
 		void visitUnconditionalJump(UnconditionalJump b);
 		void visitComparisonBasedJump(ComparisonBasedJump b);
@@ -77,8 +77,8 @@ public class BytecodeInstanceSwitch {
 		else if(b instanceof Bytecode.Update) {
 			visitor.visitUpdate((Bytecode.Update)b);
 		}
-		else if(b instanceof Bytecode.For) {
-			visitor.visitFor((Bytecode.For)b);
+		else if(b instanceof Bytecode.ForAll) {
+			visitor.visitFor((Bytecode.ForAll)b);
 		}
 		else if(b instanceof Bytecode.While) {
 			visitor.visitWhile((Bytecode.While)b);

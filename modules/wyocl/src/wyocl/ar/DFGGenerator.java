@@ -107,7 +107,13 @@ public class DFGGenerator {
 		}
 	}
 	
-	public static void populateDFG(CFGNode root, Map<Integer, DFGNode> argumentRegisters) {
+	protected static void populateDFG(CFGNode root, Map<Integer, DFGNode> argumentRegisters) {
+		for(DFGNode n : argumentRegisters.values()) {
+			if(!n.nextModified.isEmpty() || !n.lastModified.isEmpty() || !n.nextRead.isEmpty() || !n.lastRead.isEmpty()) {
+				throw new InternalError("Argument registers should not have connected DFGNodes");
+			}
+		}
+		
 		DFGReadWriteTracking registerInfo = new DFGReadWriteTracking(new DFGRegisterMapping(), new DFGRegisterMapping());
 		
 		for(Map.Entry<Integer, DFGNode> entry : argumentRegisters.entrySet()) {
@@ -122,6 +128,28 @@ public class DFGGenerator {
 		populateNextModifiedRead(allDFGNodes);
 	}
 	
+	public static void clearDFG(CFGNode rootNode) {
+		CFGIterator.iterateCFGForwards(new CFGIterator.CFGNodeCallback() {
+			@Override
+			public boolean process(CFGNode node) {
+				node.clearDFGNodes();
+				if(node.startRegisterInfo != null || node.endRegisterInfo != null) {
+					throw new InternalError("CFGNodes should not have registerInfo after clearDFG()");
+				}
+				Set<DFGNode> nodes = new HashSet<DFGNode>();
+				node.gatherDFGNodesInto(nodes);
+				for(DFGNode n : nodes) {
+					if(n != null) {
+						if(!n.nextModified.isEmpty() || !n.lastModified.isEmpty() || !n.nextRead.isEmpty() || !n.lastRead.isEmpty()) {
+							throw new InternalError("DFGNodes should not be connected after clearDFG()");
+						}
+					}
+				}
+				return true;
+			}
+		}, rootNode, null);
+	}
+	
 	/**
 	 * This method should never be called outside the context of a call to populateDFG.
 	 * This should only ever be called from CFGNode.propogateRegisterInfo(...)
@@ -132,7 +160,7 @@ public class DFGGenerator {
 	 */
 	protected static void populatePartialDFGFromRecursion(CFGNode root, DFGReadWriteTracking registerInfo, Set<CFGNode> endNodes) {
 		if(DEBUG) {
-			System.err.println("Populating DFG for" + root);
+			System.err.println("Populating DFG for " + root);
 			System.err.println("With written types:");
 			for(Map.Entry<Integer, DFGInfo> entry : registerInfo.writeInfo.registerMapping.entrySet()) {
 				System.err.println("\t" + entry.getKey() + ": " + entry.getValue().type);
@@ -308,7 +336,17 @@ public class DFGGenerator {
 	}
 
 	public static DFGReadWriteTracking propogateDFGThroughBytecodes(List<Bytecode> instructions, DFGReadWriteTracking registerInfo, Set<DFGNode> dfgNodes) {
-		if(DEBUG) { System.err.println("Propogate types through bytecodes"); }
+		if(DEBUG) {
+			if(DEBUG) { System.err.println("Propogate types through bytecodes"); }
+			System.err.println("With written types:");
+			for(Map.Entry<Integer, DFGInfo> entry : registerInfo.writeInfo.registerMapping.entrySet()) {
+				System.err.println("\t" + entry.getKey() + ": " + entry.getValue().type);
+			}
+			System.err.println("And read types:");
+			for(Map.Entry<Integer, DFGInfo> entry : registerInfo.readWriteInfo.registerMapping.entrySet()) {
+				System.err.println("\t" + entry.getKey() + ": " + entry.getValue().type);
+			}
+		}
 		
 		DFGReadWriteTracking runningState = new DFGReadWriteTracking(registerInfo);
 		
@@ -363,7 +401,7 @@ public class DFGGenerator {
 				if(readWriteState != null) {
 					node.lastReadOrWrite.addAll(readWriteState.lastNodes);
 				}
-
+				
 				runningState.writeInfo.registerMapping.put(register, new DFGInfo(node));
 				runningState.readWriteInfo.registerMapping.put(register, new DFGInfo(node));
 			}
@@ -384,5 +422,31 @@ public class DFGGenerator {
 		instructions.add(bytecode);
 		
 		return propogateDFGThroughBytecodes(instructions, registerInfo, null);
+	}
+
+	public static void clearDFG(Bytecode bytecode) {
+		for(Map.Entry<Integer, DFGNode> entry : bytecode.readDFGNodes.entrySet()) {
+			clearDFGNode(entry.getValue());
+		}
+		
+		bytecode.readDFGNodes.clear();
+		bytecode.writtenDFGNodes.clear();
+	}
+
+	public static void clearDFGNode(DFGNode node) {
+		if(node != null) {
+			for(DFGNode n : node.lastModified) {
+				n.nextModified.remove(node);
+			}
+			for(DFGNode n : node.nextModified) {
+				n.lastModified.remove(node);
+			}
+			for(DFGNode n : node.lastRead) {
+				n.nextRead.remove(node);
+			}
+			for(DFGNode n : node.nextRead) {
+				n.lastRead.remove(node);
+			}
+		}
 	}
 }

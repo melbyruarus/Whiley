@@ -24,4 +24,8 @@ public class Argument implements Comparable<Argument> {
 	public void setReadonly(boolean readonly) {
 		this.readonly = readonly;
 	}
+	
+	public String toString() {
+		return "Argument("+register+", "+type+")";
+	}
 }

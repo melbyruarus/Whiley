@@ -9,7 +9,7 @@ import wyrl.io.JavaIdentifierOutputStream;
 public class SymbolUtilities {
 	public static String nameMangle(String name, Type.FunctionOrMethod ft) {				
 		try {			
-			return name + "$" + typeMangle(ft);
+			return name + "_" + typeMangle(ft);
 		} catch(IOException e) {
 			throw new RuntimeException(e);
 		}

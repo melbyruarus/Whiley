@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.Set;
 
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
-
 import wybs.util.Pair;
 import wyil.lang.Code;
 import wyil.lang.Code.Comparator;
@@ -18,21 +17,20 @@ import wyil.lang.Constant;
 import wyil.lang.Type;
 import wyil.lang.Type.Leaf;
 import wyocl.ar.Bytecode;
-import wyocl.ar.Bytecode.GPUSupportedBytecode;
-import wyocl.ar.Bytecode.Not;
-import wyocl.ar.CFGNode;
 import wyocl.ar.Bytecode.Assign;
 import wyocl.ar.Bytecode.Binary;
 import wyocl.ar.Bytecode.ComparisonBasedJump;
 import wyocl.ar.Bytecode.ConstLoad;
 import wyocl.ar.Bytecode.Convert;
-import wyocl.ar.Bytecode.For;
+import wyocl.ar.Bytecode.ForAll;
+import wyocl.ar.Bytecode.GPUSupportedBytecode;
 import wyocl.ar.Bytecode.Invoke;
 import wyocl.ar.Bytecode.Label;
 import wyocl.ar.Bytecode.LengthOf;
 import wyocl.ar.Bytecode.Load;
 import wyocl.ar.Bytecode.LoopEnd;
 import wyocl.ar.Bytecode.Move;
+import wyocl.ar.Bytecode.Not;
 import wyocl.ar.Bytecode.Return;
 import wyocl.ar.Bytecode.Switch;
 import wyocl.ar.Bytecode.TupleLoad;
@@ -40,7 +38,9 @@ import wyocl.ar.Bytecode.Unary;
 import wyocl.ar.Bytecode.UnconditionalJump;
 import wyocl.ar.Bytecode.Update;
 import wyocl.ar.Bytecode.While;
+import wyocl.ar.CFGNode;
 import wyocl.ar.CFGNode.ConditionalJumpNode;
+import wyocl.ar.CFGNode.ForAllLoopNode;
 import wyocl.ar.CFGNode.ForLoopNode;
 import wyocl.ar.CFGNode.LoopBreakNode;
 import wyocl.ar.CFGNode.LoopEndNode;
@@ -50,6 +50,7 @@ import wyocl.ar.CFGNode.ReturnNode;
 import wyocl.ar.CFGNode.UnresolvedTargetNode;
 import wyocl.ar.CFGNode.VanillaCFGNode;
 import wyocl.ar.CFGNode.WhileLoopNode;
+import wyocl.ar.DFGNode;
 import wyocl.ar.utils.BytecodeInstanceSwitch;
 import wyocl.ar.utils.CFGInstanceSwitch;
 import wyocl.ar.utils.CFGIterator;
@@ -62,111 +63,142 @@ public class OpenCLOpWriter {
 	private static final boolean WRITE_BYTECODES_TO_COMMENTS = true;
 	private static final String LABEL_PREFIX = "label";
 	private static final boolean DEBUG = false;
-	
+
 	public final OpenCLTypeWriter typeWriter = new OpenCLTypeWriter();
 	private final FunctionInvokeTranslator functionTranslator;
-	
+
 	public interface FunctionInvokeTranslator {
 		/**
 		 * The OpWriter will call this method when it encounters a invoke bytecode
 		 * and requires a translation of the function name from WYIL to OpenCL.
 		 * It is the responsibility of the implementer of this method to ensure
 		 * that a function with a matching name and type signature exists in the OpenCL
-		 * file. The appropriate place to write these called functions is when this 
+		 * file. The appropriate place to write these called functions is when this
 		 * method is called.
-		 * 
+		 *
 		 * @param b The bytecode of the function invoke
 		 * @return The name of the translated function
 		 */
 		public String translateFunctionName(Bytecode b);
 	}
-	
+
 	public static void writeRuntime(PrintWriter writer) { // TODO: this should be loaded in from a file or something
 		writer.println();
 		writer.println("// Beginning whiley GPGPU runtime library");
 		writer.println("// Ending whiley GPGPU runtime library");
 		writer.println();
 	}
-	
+
 	public OpenCLOpWriter(FunctionInvokeTranslator functionTranslator) {
 		this.functionTranslator = functionTranslator;
 	}
 
-	public void writeBlock(CFGNode rootNode, List<Entry> entries, PrintWriter bodyWriter) {
+	public void writeFunctionBody(List<Entry> entries, PrintWriter bodyWriter) {
 		StringWriter sw = new StringWriter();
-		final PrintWriter writer = new PrintWriter(sw);
-		
-		if(rootNode instanceof CFGNode.ForLoopNode) {
-			CFGNode.ForLoopNode loopNode = (CFGNode.ForLoopNode)rootNode;
-			if(entries.size() > 0) {
-				Bytecode.For forAll = loopNode.getBytecode();
-				Utils.writeIndents(writer, 1);
-				typeWriter.writeLHS(forAll.getIndexRegister(), forAll.getIndexType(), writer);
-				writer.print(" = ");
+		PrintWriter writer = new PrintWriter(sw);
+
+		startTask(entries, bodyWriter, writer, sw);
+	}
+
+	public void writeLoopBodyAsKernel(CFGNode.LoopNode rootNode, List<Entry> entries, PrintWriter bodyWriter) {
+		StringWriter sw = new StringWriter();
+		PrintWriter writer = new PrintWriter(sw);
+
+		CFGNode.LoopNode loopNode = rootNode;
+		Set<DFGNode> indexDFGs = new HashSet<DFGNode>();
+		loopNode.getIndexDFGNodes(indexDFGs);
+
+		if(indexDFGs.size() != 1) {
+			throw new InternalError("Unable to handle more/less than one simultanious index register");
+		}
+
+		DFGNode indexDFG = indexDFGs.iterator().next();
+
+		if(entries.size() > 0) {
+			Utils.writeIndents(writer, 1);
+			typeWriter.writeLHS(indexDFG.register, indexDFG.type, writer);
+			writer.print(" = ");
+
+			if(rootNode instanceof CFGNode.ForAllLoopNode) {
+				Bytecode.ForAll forAll = ((CFGNode.ForAllLoopNode)loopNode).getBytecode();
+
 				typeWriter.writeListAccessor(forAll.getSourceRegister(), new ExpressionWriter() {
 					@Override
 					public void writeExpression(PrintWriter writer) {
 						writeKernelGlobalIndex(0, writer); // TODO: Support multiple dimensions
 					}
 				}, writer);
-				writer.println("; // Get work item");
-				
-				entries.remove(entries.size()-1);
 			}
+			else if(rootNode instanceof CFGNode.ForLoopNode) {
+				writeKernelGlobalIndex(0, writer); // TODO: Support multiple dimensions
+			}
+			else {
+				throw new InternalError("Unexepected loop type encountered: " + rootNode);
+			}
+
+			writer.println("; // Get work item");
+
+			entries.remove(entries.size()-1);
 		}
-		
+
+		startTask(entries, bodyWriter, writer, sw);
+	}
+
+	private void startTask(List<Entry> entries, PrintWriter bodyWriter, PrintWriter writer, StringWriter sw) {
 		new Task(writer).execute(entries);
-		
+
 		bodyWriter.print("\n\t// Beginning Boilerplate\n\n");
 		bodyWriter.print(typeWriter.boilerPlate());
 		bodyWriter.print("\n\t// Ending Boilerplate\n\n");
 		bodyWriter.print("\n\t// Begin kernel\n\n");
 		bodyWriter.print(sw.toString());
 	}
-	
+
 	private void writeKernelGlobalIndex(int dimension, PrintWriter writer) {
-		writer.print("get_global_id(");
+		writer.print("(get_global_id(");
 		writer.print(dimension);
-		writer.print(')');
+		writer.print(") + get_global_offset(");
+		writer.print(dimension);
+		writer.print("))");
 	}
-	
+
 	private class Task {
 		private final PrintWriter writer;
 		private final Map<CFGNode, Integer> nodeIndexes = new HashMap<CFGNode, Integer>();
 		private final Map<Integer, CFGNode> reverseNodeIndexes = new HashMap<Integer, CFGNode>();
 		private final Set<CFGNode> nodesNeedingLabels = new HashSet<CFGNode>();
-				
+
 		private int indentationLevel = 1;
-		
+
 		public Task(PrintWriter writer) {
 			this.writer = writer;
 		}
-		
-		private void execute(List<Entry> entries) {			
+
+		private void execute(List<Entry> entries) {
 			populateIndexes(entries);
-			
+
 			CFGIterator.traverseNestedRepresentation(entries, new CFGIterator.CFGNestedRepresentationVisitor() {
 				@Override
 				public void visitNonNestedNode(CFGNode node) {
 					writeCFGNode(node);
 				}
-				
+
 				@Override
 				public void exitedNestedNode(CFGNode node) {
 					indentationLevel--;
 				}
-				
+
 				@Override
 				public void enteredNestedNode(CFGNode node, List<Entry> nestedEntries) {
 					indentationLevel++;
 				}
 			});
 		}
-		
+
 		private void populateIndexes(List<Entry> entries) {
 			final int index[] = new int[1];
 			index[0] = 0;
-			
+
 			CFGIterator.traverseNestedRepresentation(entries, new CFGIterator.CFGNestedRepresentationVisitor() {
 				@Override
 				public void visitNonNestedNode(CFGNode node) {
@@ -174,82 +206,87 @@ public class OpenCLOpWriter {
 					reverseNodeIndexes.put(index[0], node);
 					index[0]++;
 				}
-				
+
 				@Override
 				public void exitedNestedNode(CFGNode node) {
 				}
-				
+
 				@Override
 				public void enteredNestedNode(CFGNode node, List<Entry> nestedEntries) {
 				}
 			});
 		}
-		
+
 		private void writeCFGNode(CFGNode node) {
 			CFGInstanceSwitch.on(node, new CFGInstanceSwitch.CFGInstanceSwitchVisitor() {
 				@Override
 				public void visitWhileNode(WhileLoopNode node) {
 					writeWhileNode(node);
 				}
-				
+
 				@Override
 				public void visitVanillaNode(VanillaCFGNode node) {
 					writeVanillaNode(node);
 				}
-				
+
 				@Override
 				public void visitUnresolvedTargetNode(UnresolvedTargetNode node) {
 					throw new RuntimeException("Internal state inconsistancy");
 				}
-				
+
 				@Override
 				public void visitReturnNode(ReturnNode node) {
 					writeReturnNode(node);
 				}
-				
+
 				@Override
 				public void visitMultiConditionalJumpNode(MultiConditionalJumpNode node) {
 					writeMulticonditionalJumpNode(node);
 				}
-				
+
 				@Override
 				public void visitLoopEndNode(LoopEndNode node) {
 					writeLoopEndNode(node);
 				}
-				
+
 				@Override
 				public void visitLoopBreakNode(LoopBreakNode node) {
 					writeLoopBreakNode(node);
 				}
-				
+
 				@Override
-				public void visitForNode(ForLoopNode node) {
-					writeForNode(node);
+				public void visitForAllNode(ForAllLoopNode node) {
+					writeForAllNode(node);
 				}
-				
+
 				@Override
 				public void visitConditionalJumpNode(ConditionalJumpNode node) {
 					writeConditionalJumpNode(node);
 				}
+
+				@Override
+				public void vistForNode(ForLoopNode node) {
+					writeForNode(node);
+				}
 			});
 		}
-	
+
 		protected void writeConditionalJumpNode(ConditionalJumpNode node) {
 			checkAndAddLabelIfNeeded(node);
-			
+
 			if(node.getBytecode() instanceof Bytecode.ComparisonBasedJump) {
 				Bytecode.ComparisonBasedJump ifCode = (Bytecode.ComparisonBasedJump)node.getBytecode();
-				
+
 				boolean needMet = checkIfNeedingJumps(node, node.conditionMet);
 				boolean needUnmet = checkIfNeedingJumps(node, node.conditionUnmet);
-				
+
 				boolean needsElse = needMet == needUnmet;
 				boolean reversing = needUnmet && !needMet && comparisonReversable(ifCode.getComparison());
-				
+
 				Code.Comparator comparison = reversing ? reverseComparison(ifCode.getComparison()) : ifCode.getComparison();
 				CFGNode whenMet = reversing ? node.conditionUnmet : node.conditionMet;
 				CFGNode whenUnmet = reversing ? node.conditionMet : node.conditionUnmet;
-				
+
 				writeIndents();
 				writer.print("if(");
 				writeComparitor(comparison, ifCode.getLeftOperand(), ifCode.getRightOperand());
@@ -266,15 +303,34 @@ public class OpenCLOpWriter {
 				}
 			}
 		}
-	
-		
 
 		protected void writeForNode(ForLoopNode node) {
+			checkAndAddLabelIfNeeded(node);
+
+			writeIndents();
+			writer.print("for(");
+			typeWriter.writeLHS(node.getIndexRegister(), node.getType(), writer);
+			writer.print(" = ");
+			typeWriter.writeRHS(node.getStartRegister(), writer);
+			writer.print("; ");
+			typeWriter.writeLHS(node.getIndexRegister(), node.getType(), writer);
+			writer.print(" < ");
+			typeWriter.writeRHS(node.getEndRegister(), writer);
+			writer.print("; ");
+			typeWriter.writeLHS(node.getIndexRegister(), node.getType(), writer);
+			writer.print(" = ");
+			typeWriter.writeRHS(node.getIndexRegister(), writer);
+			writer.print(" + 1) {\n");
+
+			checkAndAddJumpsIfNeeded(node, node.body);
+		}
+
+		protected void writeForAllNode(ForAllLoopNode node) {
 			final int index = nodeIndexes.get(node);
 			checkAndAddLabelIfNeeded(node);
-			
-			Bytecode.For forAll = node.getBytecode();
-			
+
+			Bytecode.ForAll forAll = node.getBytecode();
+
 			writeIndents();
 			writer.print("for(int loopIndex");
 			writer.print(index);
@@ -297,25 +353,25 @@ public class OpenCLOpWriter {
 				}
 			}, writer);
 			writer.print(";\n");
-			
+
 			checkAndAddJumpsIfNeeded(node, node.body);
 		}
-	
+
 		protected void writeLoopBreakNode(LoopBreakNode node) {
 		}
-	
+
 		protected void writeLoopEndNode(LoopEndNode node) {
 			checkAndAddLabelIfNeeded(node);
-			
+
 			writeIndents(-1);
 			writer.print("}\n");
-			
+
 			checkAndAddJumpsIfNeeded(node, node.next, -1, true);
 		}
-	
-		protected void writeMulticonditionalJumpNode(MultiConditionalJumpNode node) {			
+
+		protected void writeMulticonditionalJumpNode(MultiConditionalJumpNode node) {
 			checkAndAddLabelIfNeeded(node);
-			
+
 			writeIndents();
 			for(Pair<Constant, CFGNode> caseStatement : node.getBranches()) {
 				writer.print("if(");
@@ -334,12 +390,12 @@ public class OpenCLOpWriter {
 			writer.print(" }");
 			writeLineEnd(node.getBytecode(), false);
 		}
-	
+
 		protected void writeReturnNode(ReturnNode node) {
 			checkAndAddLabelIfNeeded(node);
-			
+
 			Bytecode.Return returnBytecode = node.getBytecode();
-			
+
 			writeIndents();
 			if(returnBytecode == null) {
 				writer.print("return;\n");
@@ -359,121 +415,121 @@ public class OpenCLOpWriter {
 				}
 			}
 		}
-	
+
 		protected void writeVanillaNode(VanillaCFGNode node) {
 			checkAndAddLabelIfNeeded(node);
-			
+
 			for(Bytecode b : node.body.instructions) {
 				if(!(b instanceof Bytecode.GPUSupportedBytecode)) {
 					throw new RuntimeException("Internal inconsistancy exception");
 				}
-				
+
 				BytecodeInstanceSwitch.on((GPUSupportedBytecode) b, new BytecodeInstanceSwitch.BytecodeInstanceSwitchVisitor() {
 					@Override
 					public void visitWhile(While b) {
 						throw new RuntimeException("Unexecpeted bytecode: "+b);
 					}
-					
+
 					@Override
 					public void visitUpdate(Update b) {
 						writeUpdate(b);
 					}
-					
+
 					@Override
 					public void visitUnconditionalJump(UnconditionalJump b) {
 						throw new RuntimeException("Unexecpeted bytecode: "+b);
 					}
-					
+
 					@Override
 					public void visitUnary(Unary b) {
 						writeUnary(b);
 					}
-					
+
 					@Override
 					public void visitTupleLoad(TupleLoad b) {
 						writeTupleLoad(b);
 					}
-					
+
 					@Override
 					public void visitSwitch(Switch b) {
 						throw new RuntimeException("Unexecpeted bytecode: "+b);
 					}
-					
+
 					@Override
 					public void visitReturn(Return b) {
 						throw new RuntimeException("Unexecpeted bytecode: "+b);
 					}
-					
+
 					@Override
 					public void visitMove(Move b) {
 						writeMove(b);
 					}
-					
+
 					@Override
 					public void visitLoopEnd(LoopEnd b) {
 						throw new RuntimeException("Unexecpeted bytecode: "+b);
 					}
-					
+
 					@Override
 					public void visitLoad(Load b) {
 						writeLoad(b);
 					}
-					
+
 					@Override
 					public void visitLengthOf(LengthOf b) {
 						writeLengthOn(b);
 					}
-					
+
 					@Override
 					public void visitLabel(Label b) {
 						throw new RuntimeException("Unexecpeted bytecode: "+b);
 					}
-					
+
 					@Override
 					public void visitInvoke(Invoke b) {
 						writeInvoke(b);
 					}
-					
+
 					@Override
-					public void visitFor(For b) {
+					public void visitFor(ForAll b) {
 						throw new RuntimeException("Unexecpeted bytecode: "+b);
 					}
-					
+
 					@Override
 					public void visitConvert(Convert b) {
 						throw new RuntimeException("Unexecpeted bytecode: "+b);
 					}
-					
+
 					@Override
 					public void visitConstLoad(ConstLoad b) {
 						writeConstLoad(b);
 					}
-					
+
 					@Override
 					public void visitComparisonBasedJump(ComparisonBasedJump b) {
 						throw new RuntimeException("Unexecpeted bytecode: "+b);
 					}
-					
+
 					@Override
 					public void visitBinary(Binary b) {
 						writeBinary(b);
 					}
-					
+
 					@Override
 					public void visitAssign(Assign b) {
 						writeAssign(b);
 					}
-	
+
 					@Override
 					public void visitNot(Not b) {
 						writeNot(b);
 					}
 				});
 			}
-			
+
 			checkAndAddJumpsIfNeeded(node, node.next);
 		}
-		
+
 		private boolean checkIfNeedingJumps(CFGNode node, CFGNode next) { // TODO: Share code with checkAndAddJumpsIfNeeded
 			if(!nodeIndexes.containsKey(next)) {
 				return true;
@@ -483,7 +539,7 @@ public class OpenCLOpWriter {
 				int searchIndex = nodeIndexes.get(node)+1;
 				while(true) {
 					after = reverseNodeIndexes.get(searchIndex);
-				
+
 					if(after == null) {
 						return true;
 					}
@@ -494,15 +550,15 @@ public class OpenCLOpWriter {
 						break;
 					}
 				}
-				
+
 				return !next.equals(after);
 			}
 		}
-	
+
 		private void checkAndAddJumpsIfNeeded(CFGNode node, CFGNode next) {
 			checkAndAddJumpsIfNeeded(node, next, 0, true);
 		}
-		
+
 		private void checkAndAddJumpsIfNeeded(CFGNode node, CFGNode next, int indentDiff, boolean newLines) {
 			if(!nodeIndexes.containsKey(next)) {
 				if(newLines) { writeIndents(indentDiff); }
@@ -514,7 +570,7 @@ public class OpenCLOpWriter {
 				int searchIndex = nodeIndexes.get(node)+1;
 				while(true) {
 					after = reverseNodeIndexes.get(searchIndex);
-				
+
 					if(after == null) {
 						if(newLines) { writeIndents(indentDiff); }
 						writer.print("return;");
@@ -528,7 +584,7 @@ public class OpenCLOpWriter {
 						break;
 					}
 				}
-				
+
 				if(!next.equals(after)) {
 					if(newLines) { writeIndents(indentDiff); }
 					while(true) {
@@ -537,15 +593,15 @@ public class OpenCLOpWriter {
 							if(newLines) { writer.print('\n'); }
 							return;
 						}
-						
+
 						if(next instanceof CFGNode.LoopBreakNode) {
 							int distance = 0;
-							CFGNode breakTarget = (CFGNode.LoopBreakNode)next;
+							CFGNode breakTarget = next;
 							while(breakTarget instanceof CFGNode.LoopBreakNode) {
 								breakTarget = ((CFGNode.LoopBreakNode)breakTarget).next;
 								distance++;
 							}
-							
+
 							// FIXME: check for switch statements
 							if(distance == 1 && nodeIndexes.containsKey(breakTarget)) {
 								writer.print("break;");
@@ -566,16 +622,16 @@ public class OpenCLOpWriter {
 							writer.print(';');
 							if(DEBUG) { writer.print("/* from: "+node + " followed by: " + after + " to: " + next + "*/"); }
 							if(newLines) { writer.print('\n'); }
-							
+
 							nodesNeedingLabels.add(next);
-							
+
 							return;
 						}
 					}
 				}
 			}
 		}
-	
+
 		private void checkAndAddLabelIfNeeded(CFGNode node) {
 			if(nodesNeedingLabels.contains(node)) {
 				writer.print(LABEL_PREFIX);
@@ -583,7 +639,7 @@ public class OpenCLOpWriter {
 				writer.print(":\n");
 			}
 		}
-	
+
 		protected void writeNot(Not b) {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
@@ -591,7 +647,7 @@ public class OpenCLOpWriter {
 			typeWriter.writeRHS(b.getOperand(), writer);
 			writeLineEnd(b);
 		}
-	
+
 		protected void writeAssign(Assign b) {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
@@ -599,23 +655,23 @@ public class OpenCLOpWriter {
 			typeWriter.writeRHS(b.getOperand(), writer);
 			writeLineEnd(b);
 		}
-	
+
 		protected void writeBinary(final Binary b) {
 			if(!(b.getType() instanceof Type.Leaf)){
 				throw new RuntimeException("Dont know how to handle nonleaf types for BinArithOp: "+b.getType());
 			}
-			
+
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
 			writer.print(" = ");
 			writePrimitiveBinArithOp(b.getArithKind(), (Type.Leaf)b.getType(), new ExpressionWriter() {
-				
+
 				@Override
 				public void writeExpression(PrintWriter writer) {
 					typeWriter.writeRHS(b.getLeftOperand(), writer);
 				}
 			}, new ExpressionWriter() {
-				
+
 				@Override
 				public void writeExpression(PrintWriter writer) {
 					typeWriter.writeRHS(b.getRightOperand(), writer);
@@ -623,7 +679,7 @@ public class OpenCLOpWriter {
 			});
 			writeLineEnd(b);
 		}
-	
+
 		protected void writeConstLoad(ConstLoad b) {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getConstant().type(), writer);
@@ -631,7 +687,7 @@ public class OpenCLOpWriter {
 			writer.print(b.getConstant()); // FIXME: should be looking at types
 			writeLineEnd(b);
 		}
-	
+
 		protected void writeInvoke(Invoke b) {
 			writeIndents();
 			if(b.getType().ret() != Type.T_VOID) {
@@ -649,7 +705,7 @@ public class OpenCLOpWriter {
 			writer.print(')');
 			writeLineEnd(b);
 		}
-	
+
 		protected void writeLengthOn(LengthOf b) {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType().element(), writer);
@@ -657,7 +713,7 @@ public class OpenCLOpWriter {
 			typeWriter.writeListLength(b.getOperand(), writer);
 			writeLineEnd(b);
 		}
-	
+
 		protected void writeLoad(final Load b) {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType().element(), writer);
@@ -670,7 +726,7 @@ public class OpenCLOpWriter {
 			}, writer);
 			writeLineEnd(b);
 		}
-	
+
 		protected void writeMove(Move b) {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
@@ -678,7 +734,7 @@ public class OpenCLOpWriter {
 			typeWriter.writeRHS(b.getOperand(), writer);
 			writeLineEnd(b);
 		}
-	
+
 		protected void writeTupleLoad(final TupleLoad b) {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType().element(b.getIndex()), writer);
@@ -691,12 +747,12 @@ public class OpenCLOpWriter {
 			}, writer);
 			writeLineEnd(b);
 		}
-	
+
 		protected void writeUnary(final Unary b) {
 			if(!(b.getType() instanceof Type.Leaf)){
 				throw new RuntimeException("Dont know how to handle nonleaf types for UnArithOp: "+b.getType());
 			}
-			
+
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
 			writer.print(" = ");
@@ -708,13 +764,13 @@ public class OpenCLOpWriter {
 			});
 			writeLineEnd(b);
 		}
-	
+
 		protected void writeUpdate(Update b) {
 			// TODO: implement this properly
 			if(b.getDataStructureType() instanceof Type.List) {
 				for(Code.LVal<Type.EffectiveList> _lv : b.getLValueIterator()) {
 					final Code.ListLVal lv = (Code.ListLVal)_lv;
-					
+
 					writeIndents();
 					typeWriter.writeListAccessor(b.getTarget(), new ExpressionWriter() {
 						@Override
@@ -731,23 +787,23 @@ public class OpenCLOpWriter {
 				throw new NotImplementedException();
 			}
 		}
-	
+
 		protected void writeWhileNode(WhileLoopNode node) {
 			checkAndAddLabelIfNeeded(node);
-			
+
 			writeIndents();
 			writer.print("while(1) {");
 			writeLineEnd(node.getBytecode(), false);
 		}
-	
+
 		private void writeIndents() {
 			Utils.writeIndents(writer, indentationLevel);
 		}
-		
+
 		private void writeIndents(int diff) {
 			Utils.writeIndents(writer, indentationLevel+diff);
 		}
-		
+
 		private void writePrimitiveBinArithOp(Code.BinArithKind kind, Type.Leaf type, ExpressionWriter lhs, ExpressionWriter rhs) {
 			writer.print('(');
 			switch(kind) {
@@ -825,7 +881,7 @@ public class OpenCLOpWriter {
 			}
 			writer.print(')');
 		}
-		
+
 		private void writePrimitiveUnArithOp(UnArithKind kind, Leaf type, ExpressionWriter expressionWriter) {
 			writer.print('(');
 			switch(kind) {
@@ -840,7 +896,7 @@ public class OpenCLOpWriter {
 			}
 			writer.print(')');
 		}
-		
+
 		private Comparator reverseComparison(Comparator op) {
 			switch(op) {
 				case SUBSET:
@@ -862,7 +918,7 @@ public class OpenCLOpWriter {
 				case NEQ:
 					return Comparator.EQ;
 			}
-			
+
 			// Can't ever get here, compiler wants it
 			throw new InternalError("Oops");
 		}
@@ -888,11 +944,11 @@ public class OpenCLOpWriter {
 				case NEQ:
 					return true;
 			}
-			
+
 			// Can't ever get here, compiler wants it
 			throw new InternalError("Oops");
 		}
-		
+
 		private void writeComparitor(Comparator op, int leftOperand, int rightOperand) {
 			writer.print('(');
 			switch(op) {
@@ -935,16 +991,16 @@ public class OpenCLOpWriter {
 			}
 			writer.print(')');
 		}
-		
+
 		private void writeLineEnd(Bytecode b) {
 			writeLineEnd(b, true);
 		}
-		
+
 		private void writeLineEnd(Bytecode b, boolean semicolon) {
 			if(semicolon) {
 				writer.print(';');
 			}
-			
+
 			if(WRITE_BYTECODES_TO_COMMENTS) {
 				writer.print(" // ");
 				writer.println(b.getCodeString());
@@ -954,7 +1010,7 @@ public class OpenCLOpWriter {
 			}
 		}
 	}
-	
+
 	public void writeFunctionDecleration(String attributes, Type.Leaf type, String name, List<Argument> arguments, PrintWriter writer) {
 		if(attributes != null) {
 			writer.print(attributes);
@@ -964,15 +1020,15 @@ public class OpenCLOpWriter {
 		writer.print(' ');
 		writer.print(name);
 		writer.print('(');
-		
+
 		String seperator = "";
 		for(Argument arg : arguments) {
 			writer.print(seperator);
 			seperator = ", ";
-			
+
 			typeWriter.writeArgDecl(arg, writer);
 		}
-		
+
 		writer.print(')');
 	}
 }

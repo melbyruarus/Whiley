@@ -13,13 +13,13 @@ import wyil.lang.Code.UnArithKind;
 import wyil.lang.Constant;
 import wyil.lang.Type;
 
-public abstract class Bytecode {
+public abstract class Bytecode implements DFGNode.DFGNodeCause {
 	public CFGNode cfgNode;
 	public final Map<Integer, DFGNode> writtenDFGNodes = new HashMap<Integer, DFGNode>();
 	public final Map<Integer, DFGNode> readDFGNodes = new HashMap<Integer, DFGNode>();
 	private final Code wyilLangCode;
 	
-	public abstract void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters);
+	protected abstract void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters);
 	
 	public String getCodeString() {
 		return wyilLangCode.toString();
@@ -83,7 +83,7 @@ public abstract class Bytecode {
 		public Unary(Code.UnArithOp code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type)));
 			readRegisters.add(code.operand);
 		}
@@ -111,7 +111,7 @@ public abstract class Bytecode {
 		public Binary(Code.BinArithOp code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type)));
 			readRegisters.add(code.leftOperand);
 			readRegisters.add(code.rightOperand);
@@ -144,7 +144,7 @@ public abstract class Bytecode {
 		public ConstLoad(Code.Const code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.constant.type())));
 		}
 
@@ -163,7 +163,7 @@ public abstract class Bytecode {
 		public Assign(Code.Assign code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type)));
 			readRegisters.add(code.operand);
 		}
@@ -187,7 +187,7 @@ public abstract class Bytecode {
 		public Move(Code.Move code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type)));
 			readRegisters.add(code.operand);
 		}
@@ -211,7 +211,7 @@ public abstract class Bytecode {
 		public Convert(Code.Convert code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type)));
 			readRegisters.add(code.operand);
 		}
@@ -235,7 +235,7 @@ public abstract class Bytecode {
 		public Load(Code.IndexOf code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (Type)code.type));
 			readRegisters.add(code.leftOperand);
 			readRegisters.add(code.rightOperand);
@@ -264,7 +264,7 @@ public abstract class Bytecode {
 		public LengthOf(Code.LengthOf code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (Type)code.type));
 			readRegisters.add(code.operand);
 		}
@@ -288,7 +288,7 @@ public abstract class Bytecode {
 		public TupleLoad(Code.TupleLoad code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (Type)code.type));
 			readRegisters.add(code.operand);
 		}
@@ -316,7 +316,7 @@ public abstract class Bytecode {
 		public Update(Code.Update code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type)));
 			readRegisters.add(code.operand);
 			for(int i : code.operands) {
@@ -351,7 +351,7 @@ public abstract class Bytecode {
 		}
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			readRegisters.add(code.leftOperand);
 			readRegisters.add(code.rightOperand);
@@ -380,7 +380,7 @@ public abstract class Bytecode {
 		public BinSetOp(wyil.lang.Code.BinSetOp code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (Type)code.type));
 			readRegisters.add(code.leftOperand);
 			readRegisters.add(code.rightOperand);
@@ -409,7 +409,7 @@ public abstract class Bytecode {
 		public BinListOp(wyil.lang.Code.BinListOp code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (Type)code.type));
 			readRegisters.add(code.leftOperand);
 			readRegisters.add(code.rightOperand);
@@ -438,7 +438,7 @@ public abstract class Bytecode {
 		public Void(wyil.lang.Code.Void code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type)));
 			for(int op : code.operands) {
 				readRegisters.add(op);
@@ -460,7 +460,7 @@ public abstract class Bytecode {
 		public SubString(wyil.lang.Code.SubString code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			for(int op : code.operands) {
 				readRegisters.add(op);
@@ -474,7 +474,7 @@ public abstract class Bytecode {
 		public SubList(wyil.lang.Code.SubList code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			for(int op : code.operands) {
 				readRegisters.add(op);
@@ -488,7 +488,7 @@ public abstract class Bytecode {
 		public Not(wyil.lang.Code.Not code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type)));
 			readRegisters.add(code.operand);
 		}
@@ -512,7 +512,7 @@ public abstract class Bytecode {
 		public NewTuple(wyil.lang.Code.NewTuple code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			for(int op : code.operands) {
 				readRegisters.add(op);
@@ -526,7 +526,7 @@ public abstract class Bytecode {
 		public NewList(wyil.lang.Code.NewList code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			for(int op : code.operands) {
 				readRegisters.add(op);
@@ -540,7 +540,7 @@ public abstract class Bytecode {
 		public NewRecord(wyil.lang.Code.NewRecord code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			for(int op : code.operands) {
 				readRegisters.add(op);
@@ -554,7 +554,7 @@ public abstract class Bytecode {
 		public NewMap(wyil.lang.Code.NewMap code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			for(int op : code.operands) {
 				readRegisters.add(op);
@@ -568,7 +568,7 @@ public abstract class Bytecode {
 		public NewObject(wyil.lang.Code.NewObject code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			readRegisters.add(code.operand);
 		}
@@ -580,7 +580,7 @@ public abstract class Bytecode {
 		public NewSet(wyil.lang.Code.NewSet code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			for(int op : code.operands) {
 				readRegisters.add(op);
@@ -594,7 +594,7 @@ public abstract class Bytecode {
 		public Invert(wyil.lang.Code.Invert code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			readRegisters.add(code.operand);
 		}
@@ -606,7 +606,7 @@ public abstract class Bytecode {
 		public FieldLoad(wyil.lang.Code.FieldLoad code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, ((Type)code.type)));
 			readRegisters.add(code.operand);
 		}
@@ -618,7 +618,7 @@ public abstract class Bytecode {
 		public Dereference(wyil.lang.Code.Dereference code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type)));
 			readRegisters.add(code.operand);
 		}
@@ -630,15 +630,15 @@ public abstract class Bytecode {
 		public Debug(wyil.lang.Code.Debug code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			readRegisters.add(code.operand);
 		}
 	}
 	
-	public static class For extends Bytecode implements Bytecode.Loop, Bytecode.GPUSupportedBytecode {
+	public static class ForAll extends Bytecode implements Bytecode.Loop, Bytecode.GPUSupportedBytecode {
 		private final Code.ForAll code;
 		
-		public For(Code.ForAll code) { super(code); this.code = code; }
+		public ForAll(Code.ForAll code) { super(code); this.code = code; }
 
 		@Override
 		public String loopEndLabel() {
@@ -646,8 +646,8 @@ public abstract class Bytecode {
 		}
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
-			writtenRegisters.add(new Pair<Integer, Type>(code.indexOperand, (Type)code.type));
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+			writtenRegisters.add(new Pair<Integer, Type>(code.indexOperand, (Type)code.type.element()));
 			readRegisters.add(code.sourceOperand);
 		}
 
@@ -687,7 +687,7 @@ public abstract class Bytecode {
 		}
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 		}
 	}
 	
@@ -701,7 +701,7 @@ public abstract class Bytecode {
 		}
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 		}
 	}
 	
@@ -716,7 +716,7 @@ public abstract class Bytecode {
 		}
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			readRegisters.add(code.leftOperand);
 			readRegisters.add(code.rightOperand);
 		}
@@ -755,7 +755,7 @@ public abstract class Bytecode {
 		}
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			readRegisters.add(code.operand);
 		}
 
@@ -779,7 +779,7 @@ public abstract class Bytecode {
 		}
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			readRegisters.add(code.operand);
 		}
 
@@ -799,7 +799,7 @@ public abstract class Bytecode {
 		}
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 		}
 	}
 	
@@ -814,7 +814,7 @@ public abstract class Bytecode {
 		}
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 		}
 	}
 	
@@ -824,7 +824,7 @@ public abstract class Bytecode {
 		public Return(Code.Return code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			if(code.type != Type.T_VOID) {
 				readRegisters.add(code.operand);
 			}
@@ -849,7 +849,7 @@ public abstract class Bytecode {
 		public Invoke(Code.Invoke code) { super(code); this.code = code; }
 		
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type.ret())));
 			for(int i : code.operands) {
 				readRegisters.add(i);
@@ -879,7 +879,7 @@ public abstract class Bytecode {
 		public Lambda(wyil.lang.Code.Lambda code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type.ret())));
 			for(int op : code.operands) {
 				readRegisters.add(op);
@@ -893,7 +893,7 @@ public abstract class Bytecode {
 		public IndirectInvoke(wyil.lang.Code.IndirectInvoke code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type.ret())));
 			readRegisters.add(code.operand);
 			for(int op : code.operands) {
@@ -908,7 +908,7 @@ public abstract class Bytecode {
 		public Assume(wyil.lang.Code.Assume code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			readRegisters.add(code.leftOperand);
 			readRegisters.add(code.rightOperand);
 		}
@@ -920,7 +920,7 @@ public abstract class Bytecode {
 		public Throw(wyil.lang.Code.Throw code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			readRegisters.add(code.operand);
 		}
 	}
@@ -931,7 +931,7 @@ public abstract class Bytecode {
 		public Assert(wyil.lang.Code.Assert code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			readRegisters.add(code.leftOperand);
 			readRegisters.add(code.rightOperand);
 		}
@@ -943,7 +943,7 @@ public abstract class Bytecode {
 		public TryEnd(wyil.lang.Code.TryEnd code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 		}
 	}
 
@@ -953,7 +953,7 @@ public abstract class Bytecode {
 		public TryCatch(wyil.lang.Code.TryCatch code) { super(code); this.code = code; }
 
 		@Override
-		public void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			readRegisters.add(code.operand);
 		}
 	}
@@ -961,7 +961,7 @@ public abstract class Bytecode {
 	
 	public static Bytecode bytecodeForCode(Code code) {
 		if(code instanceof Code.ForAll) {
-			return new Bytecode.For((Code.ForAll)code);
+			return new Bytecode.ForAll((Code.ForAll)code);
 		}
 		else if(code instanceof Code.Loop) { // Must be after Code.ForAll
 			return new Bytecode.While((Code.Loop)code);

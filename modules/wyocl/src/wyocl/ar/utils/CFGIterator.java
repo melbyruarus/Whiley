@@ -31,7 +31,7 @@ public class CFGIterator {
 			CFGNode node = fringe.iterator().next();
 			processed.add(node);
 			fringe.remove(node);
-			
+						
 			if(!callback.process(node)) {
 				return;
 			}

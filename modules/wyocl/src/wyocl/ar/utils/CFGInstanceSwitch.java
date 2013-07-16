@@ -2,6 +2,7 @@ package wyocl.ar.utils;
 
 import wyocl.ar.CFGNode;
 import wyocl.ar.CFGNode.ConditionalJumpNode;
+import wyocl.ar.CFGNode.ForAllLoopNode;
 import wyocl.ar.CFGNode.ForLoopNode;
 import wyocl.ar.CFGNode.LoopBreakNode;
 import wyocl.ar.CFGNode.LoopEndNode;
@@ -14,7 +15,7 @@ import wyocl.ar.CFGNode.WhileLoopNode;
 public class CFGInstanceSwitch {
 	public static interface CFGInstanceSwitchVisitor {
 		void visitVanillaNode(VanillaCFGNode node);
-		void visitForNode(ForLoopNode node);
+		void visitForAllNode(ForAllLoopNode node);
 		void visitWhileNode(WhileLoopNode node);
 		void visitLoopBreakNode(LoopBreakNode node);
 		void visitLoopEndNode(LoopEndNode node);
@@ -22,14 +23,15 @@ public class CFGInstanceSwitch {
 		void visitConditionalJumpNode(ConditionalJumpNode node);
 		void visitReturnNode(ReturnNode node);
 		void visitUnresolvedTargetNode(UnresolvedTargetNode node);
+		void vistForNode(ForLoopNode node);
 	}
-	
+
 	public static void on(CFGNode node, CFGInstanceSwitchVisitor visitor) {
 		if(node instanceof CFGNode.VanillaCFGNode) {
 			visitor.visitVanillaNode((CFGNode.VanillaCFGNode)node);
 		}
-		else if(node instanceof CFGNode.ForLoopNode) {
-			visitor.visitForNode((CFGNode.ForLoopNode)node);
+		else if(node instanceof CFGNode.ForAllLoopNode) {
+			visitor.visitForAllNode((CFGNode.ForAllLoopNode)node);
 		}
 		else if(node instanceof CFGNode.WhileLoopNode) {
 			visitor.visitWhileNode((CFGNode.WhileLoopNode)node);
@@ -51,6 +53,9 @@ public class CFGInstanceSwitch {
 		}
 		else if(node instanceof CFGNode.UnresolvedTargetNode) {
 			visitor.visitUnresolvedTargetNode((CFGNode.UnresolvedTargetNode)node);
+		}
+		else if(node instanceof CFGNode.ForLoopNode) {
+			visitor.vistForNode((CFGNode.ForLoopNode)node);
 		}
 		else {
 			throw new RuntimeException("Internal state inconsistancy");
