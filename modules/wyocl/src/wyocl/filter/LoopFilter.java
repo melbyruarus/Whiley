@@ -377,7 +377,7 @@ public class LoopFilter {
 			currentBlocksSortedCFG = CFGIterator.createNestedRepresentation(currentBlocksCFG);
 			skipCurrentBlock = !preprocessLoops();
 		} catch (NotADAGException e) {
-			System.err.println("Somehow the current block has a non-DAG CFG");
+			System.err.println("Somehow the current block has a CFG which is not a DAG -> ???? leaving this block entirely on the CPU for the time being");
 			skipCurrentBlock = true;
 		}
 	}
