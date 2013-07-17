@@ -953,13 +953,18 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class TryEnd extends Bytecode implements Exception {
+	public static class TryEnd extends Bytecode implements Exception, Control, Target {
 		private final wyil.lang.Code.TryEnd code;
 		
 		public TryEnd(wyil.lang.Code.TryEnd code) { super(code); this.code = code; }
 
 		@Override
 		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		}
+
+		@Override
+		public String name() {
+			return code.label;
 		}
 	}
 

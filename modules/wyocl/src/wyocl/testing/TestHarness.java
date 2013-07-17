@@ -25,12 +25,17 @@
 
 package wyocl.testing;
 
-import java.io.*;
+import static org.junit.Assert.fail;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.StringReader;
 
 import wyc.WycMain;
 import wyocl.util.WyoclBuildTask;
-
-import static org.junit.Assert.fail;
 
 public class TestHarness {
 	private static final String WYONE_PATH="../../../modules/wyone/src/";
@@ -85,7 +90,7 @@ public class TestHarness {
 	protected void runTest(String name) {
 		String filename = sourcepath + File.separatorChar + name + ".whiley";
 		if (compile("-wd", sourcepath, "-wyildir", sourcepath, "-wp",
-				WYRT_PATH, filename) != WycMain.SUCCESS) {
+				WYRT_PATH, filename, "-verbose") != WycMain.SUCCESS) {
 			fail("couldn't compile test!");
 		} else {
 			String output = run(sourcepath, name);
@@ -239,6 +244,7 @@ public class TestHarness {
 			start();
 		}
 
+		@Override
 		public void run() {
 			try {
 				int nextChar;

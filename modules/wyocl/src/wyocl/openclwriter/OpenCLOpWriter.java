@@ -59,7 +59,6 @@ import wyocl.filter.Argument;
 import wyocl.openclwriter.OpenCLTypeWriter.ExpressionWriter;
 
 public class OpenCLOpWriter {
-	private static final String GPGPU_RUNTIME_PREFIX = "whiley_gpgpu_runtime_";
 	private static final boolean WRITE_BYTECODES_TO_COMMENTS = true;
 	private static final String LABEL_PREFIX = "label";
 	private static final boolean DEBUG = false;

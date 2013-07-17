@@ -23,6 +23,7 @@ import wyocl.ar.utils.CFGIterator;
 import wyocl.ar.utils.CFGIterator.CFGNodeCallback;
 import wyocl.ar.utils.NotADAGException;
 import wyocl.filter.LoopFilterCFGCompatabilityAnalyser.AnalyserResult;
+import wyocl.filter.optimizer.CFGOptimizer;
 
 public class LoopFilter {
 	/**
@@ -63,7 +64,7 @@ public class LoopFilter {
 			if(!analyserResult.anyLoopsCompatable) {
 				return null;
 			}
-			rootNode = LoopFilterCFGOptimizer.process(rootNode, analyserResult);
+			rootNode = CFGOptimizer.process(rootNode, analyserResult, methodArgumentsDFGNodes);
 			
 			CFGIterator.iterateCFGFlow(new CFGNodeCallback() {
 				@Override
@@ -86,11 +87,22 @@ public class LoopFilter {
 				public boolean process(CFGNode node) {
 					if(node instanceof CFGNode.LoopNode) {
 						CFGNode.LoopNode loop = (CFGNode.LoopNode)node;
+						
+						if(analyserResult.loopCompatabilities.get(loop) == null) {
+							throw new InternalError("Loop combatabilities have not been determined for: " + loop);
+						}
+						
 						if(analyserResult.loopCompatabilities.get(loop) == LoopType.CPU_EXPLICIT) {
 							processCompatableNode(node);
 						}
 						else {
-							blockEntries.addAll(finalkernels.get(loop).replacementEntries);
+							if(finalkernels.get(loop) == null) {
+								throw new InternalError("Loop replacements should have been computed for: " + loop + " with compatability: " + analyserResult.loopCompatabilities.get(loop));
+							}
+							
+							if(analyserResult.loopCompatabilities.get(loop) == LoopType.GPU_IMPLICIT) {
+								blockEntries.addAll(finalkernels.get(loop).replacementEntries);
+							}
 						}
 					}
 					else {

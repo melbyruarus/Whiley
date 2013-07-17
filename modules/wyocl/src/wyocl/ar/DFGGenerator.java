@@ -37,10 +37,12 @@ public class DFGGenerator {
 			lastNodes.add(node);
 		}
 
+		@Override
 		public int hashCode() {
 			return 1238978 + type.hashCode() ^ lastNodes.hashCode(); 
 		}
 			
+		@Override
 		public boolean equals(Object o) {
 			if(o instanceof DFGInfo) {
 				DFGInfo ot = (DFGInfo)o;
@@ -62,10 +64,12 @@ public class DFGGenerator {
 		public DFGRegisterMapping() {
 		}
 		
+		@Override
 		public int hashCode() {
 			return 323444 + registerMapping.hashCode(); 
 		}
 			
+		@Override
 		public boolean equals(Object o) {
 			if(o instanceof DFGRegisterMapping) {
 				DFGRegisterMapping ot = (DFGRegisterMapping)o;
@@ -94,10 +98,12 @@ public class DFGGenerator {
 			writeInfo = new DFGRegisterMapping(registerInfo.writeInfo);
 		}
 
+		@Override
 		public int hashCode() {
 			return 452345 + readWriteInfo.hashCode() ^ writeInfo.hashCode(); 
 		}
 			
+		@Override
 		public boolean equals(Object o) {
 			if(o instanceof DFGReadWriteTracking) {
 				DFGReadWriteTracking ot = (DFGReadWriteTracking)o;
@@ -107,7 +113,7 @@ public class DFGGenerator {
 		}
 	}
 	
-	protected static void populateDFG(CFGNode root, Map<Integer, DFGNode> argumentRegisters) {
+	public static void populateDFG(CFGNode root, Map<Integer, DFGNode> argumentRegisters) {
 		for(DFGNode n : argumentRegisters.values()) {
 			if(!n.nextModified.isEmpty() || !n.lastModified.isEmpty() || !n.nextRead.isEmpty() || !n.lastRead.isEmpty()) {
 				throw new InternalError("Argument registers should not have connected DFGNodes");

@@ -30,6 +30,8 @@ import wyocl.lang.ClFile;
 public class WyoclBuildTask extends WycBuildTask {
 	
 	public static class Registry extends WyjcBuildTask.Registry {
+		@Override
+		@SuppressWarnings({ "unchecked", "rawtypes" })
 		public void associate(Path.Entry e) {
 			String suffix = e.suffix();
 			
@@ -40,6 +42,7 @@ public class WyoclBuildTask extends WycBuildTask {
 			}
 		}
 		
+		@Override
 		public String suffix(Content.Type<?> t) {
 			if(t == ClFile.ContentType) {
 				return "cl";
@@ -56,6 +59,7 @@ public class WyoclBuildTask extends WycBuildTask {
 	 * benefits.
 	 */
 	public static final FileFilter clFileFilter = new FileFilter() {
+		@Override
 		public boolean accept(File f) {
 			String name = f.getName();
 			return name.endsWith(".cl") || f.isDirectory();
@@ -161,6 +165,7 @@ public class WyoclBuildTask extends WycBuildTask {
 	protected List<Path.Entry<?>> getModifiedSourceFiles() throws IOException {
 		// First, determine all whiley source files which are out-of-date with
 		// respect to their wyil files.
+		@SuppressWarnings("unchecked")
 		List<Path.Entry<?>> sources = super.getModifiedSourceFiles();
 
 		// Second, look for any wyil files which are out-of-date with their

@@ -13,11 +13,7 @@ import java.util.Set;
 import wybs.util.Pair;
 import wyil.lang.Block.Entry;
 import wyil.lang.Code;
-import wyil.lang.Code.BinArithKind;
 import wyil.lang.Constant;
-import wyil.lang.Type;
-import wyocl.ar.CFGNode.ForAllLoopNode;
-import wyocl.ar.utils.CFGIterator;
 import wyocl.ar.utils.NotADAGException;
 
 public class CFGGenerator {
@@ -38,9 +34,9 @@ public class CFGGenerator {
 
 		if(DEBUG) {
 			try {
-				System.err.println("------------ Begin CFG Printing (1/3) ------------");
+				System.err.println("------------ Begin CFG Printing (1/2) ------------");
 				ARPrinter.print(rootNode);
-				System.err.println("------------- End CFG Printing (1/3) -------------");
+				System.err.println("------------- End CFG Printing (1/2) -------------");
 			} catch (NotADAGException e1) {
 				e1.printStackTrace();
 			}
@@ -48,23 +44,9 @@ public class CFGGenerator {
 		DFGGenerator.populateDFG(rootNode, argumentRegisters);
 		if(DEBUG) {
 			try {
-				System.err.println("------------ Begin CFG Printing (2/3) ------------");
+				System.err.println("------------ Begin CFG Printing (2/2) ------------");
 				ARPrinter.print(rootNode);
-				System.err.println("------------- End CFG Printing (2/3) -------------");
-			} catch (NotADAGException e1) {
-				e1.printStackTrace();
-			}
-		}
-
-		analyseRangedBasedForAllLoops(rootNode, argumentRegisters);
-		performConstantPropogation(rootNode);
-		analyseDFGForDeadCode(rootNode);
-
-		if(DEBUG) {
-			try {
-				System.err.println("------------ Begin CFG Printing (3/3) ------------");
-				ARPrinter.print(rootNode);
-				System.err.println("------------- End CFG Printing (3/3) -------------");
+				System.err.println("------------- End CFG Printing (2/2) -------------");
 			} catch (NotADAGException e1) {
 				e1.printStackTrace();
 			}
@@ -73,129 +55,7 @@ public class CFGGenerator {
 		return rootNode;
 	}
 
-	private static void performConstantPropogation(CFGNode rootNode) {
-		// FIXME: implement
-	}
-
-	private static void analyseDFGForDeadCode(CFGNode rootNode) {
-		// FIXME: implement
-	}
-
-	private static void analyseRangedBasedForAllLoops(final CFGNode rootNode, final Map<Integer, DFGNode> argumentRegisters) {
-		// FIXME: need dummy node
-
-		final boolean[] earlyFinish = new boolean[1];
-		earlyFinish[0] = true;
-		while(earlyFinish[0]) {
-			earlyFinish[0] = false;
-
-			CFGIterator.iterateCFGFlow(new CFGIterator.CFGNodeCallback() {
-				@Override
-				public boolean process(CFGNode node) {
-					if(node instanceof CFGNode.ForAllLoopNode) {
-						CFGNode.ForAllLoopNode loop = (CFGNode.ForAllLoopNode)node;
-						DFGNode sourceDFGNode = loop.getBytecode().getSourceDFGNode();
-						if(sourceDFGNode.type instanceof Type.EffectiveList) {
-							boolean allAreRanges = true;
-							Set<Bytecode.Binary> listCreationBytecodes = new HashSet<Bytecode.Binary>();
-
-							for(DFGNode lastModification : sourceDFGNode.lastModified) {
-								if(lastModification.cause instanceof Bytecode.Binary) {
-									Bytecode.Binary bin = (Bytecode.Binary)lastModification.cause;
-									if(bin.getArithKind().equals(BinArithKind.RANGE) &&
-											bin.readDFGNodes.get(bin.getLeftOperand()).type instanceof Type.Int &&
-											bin.readDFGNodes.get(bin.getRightOperand()).type instanceof Type.Int) {
-										listCreationBytecodes.add(bin);
-									}
-									else {
-										allAreRanges = false;
-									}
-								}
-								else {
-									allAreRanges = false;
-								}
-							}
-
-							if(allAreRanges) {
-								replaceForAllWithFor(loop, listCreationBytecodes);
-								earlyFinish[0] = true;
-
-
-								populateIdentifiers(rootNode, 0);
-								DFGGenerator.clearDFG(rootNode);
-								DFGGenerator.populateDFG(rootNode, argumentRegisters);
-
-								return false; // Have to stop iterating as we have just modified the CFG, outer loop will restart iteration
-							}
-						}
-					}
-					return true;
-				}
-			}, rootNode, null);
-		}
-	}
-
-	private static boolean replaceForAllWithFor(ForAllLoopNode loop, Set<Bytecode.Binary> listCreationBytecodes) {
-		Type.Leaf indexType = (Type.Leaf)loop.getBytecode().getIndexType();
-
-		// FIXME: implement free register tracking
-		int lowerRegister = (int) (Math.random()*10000 + 10000);
-		int upperRegister = lowerRegister+1;
-
-		for(Bytecode.Binary bytecode : listCreationBytecodes) {
-			List<Bytecode> bytecodes = ((CFGNode.VanillaCFGNode)bytecode.cfgNode).body.instructions;
-			int index = bytecodes.indexOf(bytecode);
-			if(index < 0) {
-				throw new InternalError("Bytecode not contained in bytecode.cfgNode.body.instructions");
-			}
-
-			bytecodes.add(index, new Bytecode.Assign(Code.Assign(indexType, lowerRegister, bytecode.getLeftOperand())));
-			bytecodes.add(index, new Bytecode.Assign(Code.Assign(indexType, upperRegister, bytecode.getRightOperand())));
-		}
-
-		CFGNode.ForLoopNode forLoop = new CFGNode.ForLoopNode(loop.getBytecode().getIndexRegister(),
-											indexType, lowerRegister, upperRegister, loop.loopEndLabel(),
-											loop.startIndex, loop.endIndex, loop.getCausialWYILLangBytecode());
-
-		forLoop.body = loop.body;
-		loop.body = null;
-		forLoop.body.previous.remove(loop);
-		forLoop.body.previous.add(forLoop);
-
-		for(CFGNode.LoopBreakNode oldNode : loop.breakNodes) {
-			CFGNode.LoopBreakNode newNode = new CFGNode.LoopBreakNode(forLoop);
-			newNode.previous.addAll(oldNode.previous);
-			for(CFGNode n : newNode.previous) {
-				n.retargetNext(oldNode, newNode);
-			}
-			oldNode.previous.clear();
-			newNode.next = oldNode.next;
-			oldNode.next = null;
-			forLoop.breakNodes.add(newNode);
-		}
-		loop.breakNodes.clear();
-
-		forLoop.endNode.next = loop.endNode.next;
-		loop.endNode.next = null;
-		forLoop.endNode.next.previous.remove(loop.endNode);
-		forLoop.endNode.next.previous.add(forLoop.endNode);
-		forLoop.endNode.previous.addAll(loop.endNode.previous);
-		for(CFGNode p : forLoop.endNode.previous) {
-			p.retargetNext(loop.endNode, forLoop.endNode);
-		}
-		loop.endNode.previous.clear();
-
-
-		forLoop.previous.addAll(loop.previous);
-		loop.previous.clear();
-		for(CFGNode n : forLoop.previous) {
-			n.retargetNext(loop, forLoop);
-		}
-
-		return true;
-	}
-
-	private static int populateIdentifiers(CFGNode node, int id) {
+	public static int populateIdentifiers(CFGNode node, int id) {
 		node.identifier = id;
 		id++;
 		Set<CFGNode> nodes = new HashSet<CFGNode>();

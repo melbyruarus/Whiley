@@ -24,8 +24,6 @@ import wyocl.ar.utils.CFGIterator;
 import wyocl.ar.utils.NotADAGException;
 
 public class LoopFilterLoopProcessor {
-	private static final boolean DEBUG = false;
-
 	private static ArrayList<Type> executeWYGPUKernelOverArrayArgumentTypes = new ArrayList<Type>() {
 		private static final long serialVersionUID = 1L;
 

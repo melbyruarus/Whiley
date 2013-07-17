@@ -33,9 +33,22 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
-import whiley.gpgpu.OpenCL.*;
-import whiley.gpgpu.OpenCL.Devices.*;
-import whiley.gpgpu.OpenCL.Events.*;
+import org.jocl.CL;
+import org.jocl.Pointer;
+import org.jocl.Sizeof;
+
+import whiley.gpgpu.OpenCL.Buffer;
+import whiley.gpgpu.OpenCL.CommandQueue;
+import whiley.gpgpu.OpenCL.Context;
+import whiley.gpgpu.OpenCL.Kernel;
+import whiley.gpgpu.OpenCL.MemoryFlags;
+import whiley.gpgpu.OpenCL.Program;
+import whiley.gpgpu.OpenCL.Devices.Device;
+import whiley.gpgpu.OpenCL.Devices.DeviceList;
+import whiley.gpgpu.OpenCL.Devices.DeviceType;
+import whiley.gpgpu.OpenCL.Events.Event;
+import whiley.gpgpu.OpenCL.Events.EventDependancy;
+import whiley.gpgpu.OpenCL.Events.EventList;
 import whiley.gpgpu.OpenCL.Exceptions.CommandQueueInitilizationException;
 import whiley.gpgpu.OpenCL.Exceptions.ContextInitilizationException;
 import whiley.gpgpu.OpenCL.Exceptions.DeviceFetchException;
@@ -49,10 +62,6 @@ import whiley.gpgpu.OpenCL.Exceptions.ProgramReInitilizationException;
 import wyjc.runtime.WyList;
 import wyjc.runtime.WyRat;
 import wyjc.runtime.WyTuple;
-
-import org.jocl.CL;
-import org.jocl.Pointer;
-import org.jocl.Sizeof;
 
 public class Util$native {
 	private static class GPUReferenceArgument {
@@ -69,6 +78,10 @@ public class Util$native {
 				buffer.release();
 			}
 		}
+	}
+	
+	public static WyList executeWYGPUKernelOverRange(String moduleName, WyList arguments, BigInteger start, BigInteger end) {
+		return executeWYGPUKernelOverRange(moduleName, arguments, start.intValue(), end.intValue());
 	}
 
 	public static WyList executeWYGPUKernelOverRange(String moduleName, WyList arguments, int start, int end) {

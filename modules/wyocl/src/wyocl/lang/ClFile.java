@@ -45,6 +45,7 @@ public class ClFile {
 	// =========================================================================
 
 	public static final Content.Type<ClFile> ContentType = new Content.Type<ClFile>() {
+		@SuppressWarnings({ "unused", "unchecked" })
 		public Path.Entry<ClFile> accept(Path.Entry<?> e) {
 			if (e.contentType() == this) {
 				return (Path.Entry<ClFile>) e;
@@ -52,6 +53,7 @@ public class ClFile {
 			return null;
 		}
 
+		@Override
 		public ClFile read(Path.Entry<ClFile> e, InputStream input)
 				throws IOException {
 			// TODO: We'll eventually will want something here I suppose. For
@@ -59,6 +61,7 @@ public class ClFile {
 			return null; 
 		}
 
+		@Override
 		public void write(OutputStream output, ClFile file)
 				throws IOException {			
 			PrintStream pout = new PrintStream(output);
@@ -66,6 +69,7 @@ public class ClFile {
 			pout.flush();
 		}
 
+		@Override
 		public String toString() {
 			return "Content-Type: cl";
 		}

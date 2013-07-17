@@ -586,7 +586,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 
 		public CFGNode next;
 
-		LoopBreakNode(CFGNode.LoopNode loop) {this.loop = loop;}
+		public LoopBreakNode(CFGNode.LoopNode loop) {this.loop = loop;}
 
 		@Override
 		public void getFlowNextNodes(Set<CFGNode> nodes) {
@@ -1042,5 +1042,61 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		public void forBytecode(BytecodeVisitor bytecodeVisitor, Map<CFGNode, Integer> needingLabels, int[] nextLabel) {
 			throw new InternalError(this.getClass().getSimpleName() + "  cannot be visited by BytecodeVisitor");
 		}
+	}
+	
+	/**
+	 * A simple dummy CFGNode which can only be used as a placeholder, any other operations
+	 * will result in an exception. Intended for temporary use.
+	 * 
+	 * @author melby
+	 *
+	 */
+	public static class DummyNode extends CFGNode {
+		public CFGNode next;
+		
+		public DummyNode(CFGNode next) {
+			this.next = next;
+		}
+		
+		@Override
+		public void getFlowNextNodes(Set<CFGNode> nodes) {
+			nodes.add(next);
+		}
+
+		@Override
+		public void getScopeNextNodes(Set<CFGNode> nodes) {
+			nodes.add(next);
+		}
+
+		@Override
+		public void getNestedNextNodes(Set<CFGNode> nodes) {
+		}
+
+		@Override
+		protected void propogateRegisterInfo(DFGReadWriteTracking info) {
+			endRegisterInfo = startRegisterInfo = DFGGenerator.mergeRegisterInfo(startRegisterInfo, info);
+		}
+
+		@Override
+		public void gatherDFGNodesInto(Set<DFGNode> allDFGNodes) {
+		}
+
+		@Override
+		protected void clearDFGNodes() {
+			startRegisterInfo = null;
+			endRegisterInfo = null;
+		}
+
+		@Override
+		public void retargetNext(CFGNode oldNode, CFGNode newNode) {
+			if(next == oldNode) {
+				next = newNode;
+			}
+		}
+
+		@Override
+		public void forBytecode(BytecodeVisitor bytecodeVisitor, Map<CFGNode, Integer> needingLabels, int[] nextLabel) {
+		}
+
 	}
 }
