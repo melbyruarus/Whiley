@@ -55,7 +55,9 @@ public class ValidTests extends TestHarness {
 	@Test public void Test_Set_7() { verifyPassTest("test_set_07"); }	
 	@Test public void Test_Set_8() { verifyPassTest("test_set_08"); }
 	@Test public void Test_Set_9() { verifyPassTest("test_set_09"); }
-		
+	
+	@Test public void Test_List_1() { verifyPassTest("test_list_01"); }
+	
 	@Ignore("SubsetEq <=> Length") @Test public void Test_Valid_058() { verifyPassTest("test_058"); }
 	@Test public void Test_Valid_059() { verifyPassTest("test_059"); }
 	@Test public void Test_Valid_060() { verifyPassTest("test_060"); }
@@ -64,7 +66,7 @@ public class ValidTests extends TestHarness {
 	@Test public void Test_Valid_063() { verifyPassTest("test_063"); }
 	@Test public void Test_Valid_064() { verifyPassTest("test_064"); }
 	@Test public void Test_Valid_065() { verifyPassTest("test_065"); }
-	@Ignore("Nat <=> Length") @Test public void Test_Valid_066() { verifyPassTest("test_066"); }
+	@Ignore("Set <=> Length") @Test public void Test_Valid_066() { verifyPassTest("test_066"); }
 	@Ignore("Nat <=> Length") @Test public void Test_Valid_067() { verifyPassTest("test_067"); }
 	@Test public void Test_Valid_068() { verifyPassTest("test_068"); }	
 	@Ignore("SubsetEq <=> Length") @Test public void Test_Valid_069() { verifyPassTest("test_069"); }
@@ -94,7 +96,7 @@ public class ValidTests extends TestHarness {
 	@Test public void Test_Valid_112() { verifyPassTest("test_112"); }
 	@Test public void Test_Valid_113() { verifyPassTest("test_113"); }
 	@Test public void Test_Valid_114() { verifyPassTest("test_114"); }
-	@Ignore("Too Slow") @Test public void Test_Valid_115() { verifyPassTest("test_115"); }
+	@Test public void Test_Valid_115() { verifyPassTest("test_115"); }
 	@Test public void Test_Valid_116() { verifyPassTest("test_116"); }
 	@Test public void Test_Valid_117() { verifyPassTest("test_117"); }
 	@Test public void Test_Valid_118() { verifyPassTest("test_118"); }

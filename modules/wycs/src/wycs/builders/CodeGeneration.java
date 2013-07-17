@@ -5,6 +5,7 @@ import java.util.*;
 import static wybs.lang.SyntaxError.*;
 import wybs.lang.Attribute;
 import wybs.lang.NameID;
+import wybs.lang.SyntacticElement;
 import wybs.util.Pair;
 import wybs.util.ResolveError;
 import wybs.util.Trie;
@@ -330,10 +331,11 @@ public class CodeGeneration {
 					e.attribute(Attribute.Source.class));
 		}
 		case LISTAPPEND: {			
-			NameID nid = new NameID(WYCS_CORE_LIST,"Append");
+			NameID nid = new NameID(WYCS_CORE_LIST,"Append");			
 			SemanticType.Tuple argType = SemanticType.Tuple(type,type);
+			SemanticType[] generics = bindGenerics(nid,argType,e);
 			SemanticType.Function funType = SemanticType.Function(argType,
-					type,type);	
+					type,generics);	
 			Code argument = Code.Nary(argType, Code.Op.TUPLE, new Code[] {
 					lhs,rhs });
 			return Code.FunCall(funType, argument, nid,
@@ -459,13 +461,21 @@ public class CodeGeneration {
 		};
 				
 		Code operand = generate(e.operand, environment, context);
-		if(constraints != null) {
-			operand = implies(constraints,operand);
-		}		
-		Code.Op opcode = e instanceof Expr.ForAll ? Code.Op.FORALL
-				: Code.Op.EXISTS;
-		return Code.Quantifier(type, opcode, operand, types,
-				e.attribute(Attribute.Source.class));
+		
+		if(e instanceof Expr.ForAll) {
+			if(constraints != null) {
+				operand = implies(constraints,operand);
+			}		
+			return Code.Quantifier(type, Code.Op.FORALL, operand, types,
+					e.attribute(Attribute.Source.class));
+		} else {
+			if(constraints != null) {
+				// Yes, this is correct. No, it should not be an implication.
+				operand = and(constraints,operand);
+			}		
+			return Code.Quantifier(type, Code.Op.EXISTS, operand, types,
+					e.attribute(Attribute.Source.class));
+		}
 	}
 	
 	protected Code generate(Expr.FunCall e, HashMap<String, Code> environment,
@@ -511,7 +521,63 @@ public class CodeGeneration {
 					e.attribute(Attribute.Source.class));
 		}
 	}
-
+	
+	/**
+	 * This function attempts to find an appropriate binding for the generic
+	 * types accepted by a given function, and the supplied argument type. For
+	 * example, consider a call
+	 * <code>f(1)<code> for a function <code>f<T>(T)</code>. The appropriate
+	 * binding for this call is <code>{T=>int}</code>.
+	 * 
+	 * @param nid
+	 *            --- name identifier for the named function
+	 * @param type
+	 *            --- the supplied argument type
+	 * @return
+	 */
+	protected SemanticType[] bindGenerics(NameID nid, SemanticType argumentType,
+			SyntacticElement elem) {
+		try {
+			WycsFile module = builder.getModule(nid.module());
+			// module should not be null if TypePropagation has already passed.
+			Object d = module.declaration(nid.name());
+			SemanticType[] generics;
+			SemanticType parameterType;
+			if(d instanceof WycsFile.Function) {
+				WycsFile.Function fn = (WycsFile.Function) d;
+				generics = fn.type.generics();
+				parameterType = fn.type.from();
+			} else if(d instanceof WycsFile.Macro) {
+				WycsFile.Macro fn = (WycsFile.Macro) d;
+				generics = fn.type.generics();
+				parameterType = fn.type.from();
+			} else {
+				internalFailure("cannot resolve as function or macro call",
+						filename, elem);
+				return null; // dead-code
+			}
+			HashMap<String,SemanticType> binding = new HashMap<String,SemanticType>();
+			if (!SemanticType.bind(parameterType.canonicalise(), argumentType.canonicalise(), binding)) {
+				internalFailure("cannot bind function or macro call", filename,
+						elem);
+			}
+			SemanticType[] result = new SemanticType[generics.length];
+			for(int i=0;i!=result.length;++i) {
+				SemanticType.Var v = (SemanticType.Var) generics[i];
+				SemanticType type = binding.get(v.name());
+				if(type == null) {
+					internalFailure("cannot bind function or macro call",
+							filename, elem);
+				}
+				result[i] = type;
+			}
+			return result;
+		} catch (Exception ex) {
+			internalFailure(ex.getMessage(), filename, elem, ex);
+			return null; // dead-code
+		}
+	}
+	
 	protected static Code implies(Code lhs, Code rhs) {
 		lhs = Code.Unary(SemanticType.Bool, Code.Op.NOT, lhs);
 		return Code

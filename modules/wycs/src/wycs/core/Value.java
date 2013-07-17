@@ -325,14 +325,14 @@ public abstract class Value implements Comparable<Value> {
 		
 		public SemanticType type() {
 			if(values.isEmpty()) {
-				return SemanticType.Set(false,SemanticType.Void);
+				return SemanticType.Set(true,SemanticType.Void);
 			} else {
 				SemanticType[] types = new SemanticType[values.size()];
 				int i = 0;
 				for(Value v : values) {
 					types[i++] = v.type();
 				}			
-				return SemanticType.Set(false,SemanticType.Or(types));
+				return SemanticType.Set(true,SemanticType.Or(types));
 			}
 		}
 	}	
