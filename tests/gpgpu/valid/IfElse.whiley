@@ -2,7 +2,6 @@ import * from whiley.lang.*
 
 public void ::main(System.Console sys):
 	outlist = 0..20
-	otherlist = 10..30
 
 	for number in 0..20:
 		if number < 5:
