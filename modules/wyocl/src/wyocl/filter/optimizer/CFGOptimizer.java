@@ -12,6 +12,7 @@ public class CFGOptimizer {
 
 	public static CFGNode process(CFGNode rootNode, AnalyserResult analyserResult, final Map<Integer, DFGNode> argumentRegisters) {
 		CFGNode.DummyNode dummyNode = new CFGNode.DummyNode(rootNode);
+		rootNode.previous.add(dummyNode);
 		
 		ForallToForOptimisationStage.process(dummyNode, analyserResult, argumentRegisters);
 		
@@ -19,6 +20,7 @@ public class CFGOptimizer {
 		
 		DeadCodeEliminationStage.process(dummyNode, analyserResult, argumentRegisters);
 		
+		rootNode.previous.remove(dummyNode);
 		return dummyNode.next;
 	}
 }

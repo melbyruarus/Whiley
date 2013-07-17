@@ -10,6 +10,7 @@ import java.util.Set;
 import wybs.lang.Path.ID;
 import wyil.lang.Block;
 import wyil.lang.Block.Entry;
+import wyil.lang.Code;
 import wyil.lang.Type;
 import wyil.lang.WyilFile;
 import wyocl.ar.Bytecode;
@@ -31,7 +32,7 @@ public class LoopFilter {
 	 * being filtered.
 	 */
 	private final String modulePath;
-	
+		
 	private Map<Integer, DFGNode> methodArgumentsDFGNodes;
 
 	public LoopFilter(ID id) {
@@ -101,7 +102,9 @@ public class LoopFilter {
 							}
 							
 							if(analyserResult.loopCompatabilities.get(loop) == LoopType.GPU_IMPLICIT) {
+								blockEntries.add(new Entry(Code.Label(CFGNode.calculateLabel(loop))));
 								blockEntries.addAll(finalkernels.get(loop).replacementEntries);
+								blockEntries.add(new Entry(Code.Goto(CFGNode.calculateLabel(loop.endNode.next))));
 							}
 						}
 					}
@@ -126,7 +129,9 @@ public class LoopFilter {
 									return true;
 								}
 								else {
+									blockEntries.add(new Entry(Code.Label(CFGNode.calculateLabel(loop))));
 									blockEntries.addAll(finalkernels.get(loop).replacementEntries);
+									blockEntries.add(new Entry(Code.Goto(CFGNode.calculateLabel(loop.endNode.next))));
 									return false;
 								}
 							}
@@ -134,7 +139,7 @@ public class LoopFilter {
 								return true;
 							}
 						}
-					}, new HashMap<CFGNode, Integer>(), new int[1]);
+					});
 				}
 			}, rootNode, null);
 			

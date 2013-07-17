@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import wybs.util.Pair;
@@ -22,7 +21,7 @@ import wyocl.ar.utils.TopologicalSorter;
 import wyocl.ar.utils.TopologicalSorter.DAGSortNode;
 
 public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.DFGNodeCause {
-	private static final String LABEL_PREFIX = "label";
+	private static final String LABEL_PREFIX = "wyocl_wyil_cfg_wyil_conversion_label";
 	
 	public static interface BytecodeVisitor {
 		public void visit(Bytecode b);
@@ -38,7 +37,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 	}
 
 	public Set<CFGNode> previous = new HashSet<CFGNode>();
-	public int identifier;
+	public int identifier = -1;
 	protected DFGReadWriteTracking startRegisterInfo;
 	protected DFGReadWriteTracking endRegisterInfo;
 
@@ -140,26 +139,27 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 	 * traverse into nested nodes, i.e. for the body of a loop
 	 * 
 	 * @param bytecodeVisitor
-	 * @param needingLabels
-	 * @param nextLabel
 	 */
-	public abstract void forBytecode(BytecodeVisitor bytecodeVisitor, Map<CFGNode, Integer> needingLabels, int[] nextLabel);
+	public abstract void forBytecode(BytecodeVisitor bytecodeVisitor);
 
-	private static String calculateLabel(BytecodeVisitor bytecodeVisitor, Map<CFGNode, Integer> needingLabels, int[] nextLabel, CFGNode nextNode) {
-		Integer i = needingLabels.get(nextNode);
-		if(i == null) {
-			i = nextLabel[0];
-			needingLabels.put(nextNode, i);
-			nextLabel[0]++;
+	public static String calculateLabel(CFGNode nextNode) {
+		if(nextNode.identifier < 0) {
+			throw new InternalError("Nodes must have ids propogated before calling forBytecode()");
 		}
 		
-		return LABEL_PREFIX + i;
+		return LABEL_PREFIX + nextNode.identifier;
 	}
 	
-	private static void checkIfNeedingLabel(BytecodeVisitor bytecodeVisitor, Map<CFGNode, Integer> needingLabels, CFGNode node) {
-		if(needingLabels.containsKey(node)) {
-			bytecodeVisitor.visit(new Bytecode.Label(Code.Label(LABEL_PREFIX+needingLabels.get(node))));
+	private static void checkIfNeedingLabel(BytecodeVisitor bytecodeVisitor, CFGNode node) {
+		if(node.identifier < 0) {
+			throw new InternalError("Nodes must have ids propogated before calling forBytecode()");
 		}
+		
+		bytecodeVisitor.visit(new Bytecode.Label(Code.Label(LABEL_PREFIX+node.identifier)));
+	}
+	
+	public void gotoLabel(String label, BytecodeVisitor bytecodeVisitor) {
+		bytecodeVisitor.visit(new Bytecode.UnconditionalJump(Code.Goto(label)));
 	}
 	
 	public DFGReadWriteTracking getStartTypes() {
@@ -227,14 +227,14 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(BytecodeVisitor bytecodeVisitor, Map<CFGNode, Integer> needingLabels, final int[] nextLabel) {
-			checkIfNeedingLabel(bytecodeVisitor, needingLabels, this);
+		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
+			checkIfNeedingLabel(bytecodeVisitor, this);
 			
 			for(Bytecode b : body.instructions) {
 				bytecodeVisitor.visit(b);
 			}
 			
-			calculateLabel(bytecodeVisitor, needingLabels, nextLabel, next);
+			gotoLabel(calculateLabel(next), bytecodeVisitor);
 		}
 	}
 
@@ -376,15 +376,14 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(final BytecodeVisitor bytecodeVisitor, final Map<CFGNode, Integer> needingLabels, final int[] nextLabel) {
-			checkIfNeedingLabel(bytecodeVisitor, needingLabels, this);
-			
+		public void forBytecode(final BytecodeVisitor bytecodeVisitor) {
+			checkIfNeedingLabel(bytecodeVisitor, this);
 			bytecodeVisitor.visit(bytecode);
 			CFGIterator.iterateCFGScope(new CFGNodeCallback() {
 				@Override
 				public boolean process(CFGNode node) {
 					if(bytecodeVisitor.shouldVisitNode(node)) {
-						node.forBytecode(bytecodeVisitor, needingLabels, nextLabel);
+						node.forBytecode(bytecodeVisitor);
 					}
 					return true;
 				}
@@ -515,7 +514,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(final BytecodeVisitor bytecodeVisitor, final Map<CFGNode, Integer> needingLabels, final int[] nextLabel) {
+		public void forBytecode(final BytecodeVisitor bytecodeVisitor) {
 			throw new InternalError(this.getClass().getSimpleName() + " does not support forBytecode(BytecodeVisitor)");
 		}
 	}
@@ -565,15 +564,15 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(final BytecodeVisitor bytecodeVisitor, final Map<CFGNode, Integer> needingLabels, final int[] nextLabel) {
-			checkIfNeedingLabel(bytecodeVisitor, needingLabels, this);
+		public void forBytecode(final BytecodeVisitor bytecodeVisitor) {
+			checkIfNeedingLabel(bytecodeVisitor, this);
 			
 			bytecodeVisitor.visit(bytecode);
 			CFGIterator.iterateCFGScope(new CFGNodeCallback() {
 				@Override
 				public boolean process(CFGNode node) {
 					if(bytecodeVisitor.shouldVisitNode(node)) {
-						node.forBytecode(bytecodeVisitor, needingLabels, nextLabel);
+						node.forBytecode(bytecodeVisitor);
 					}
 					return true;
 				}
@@ -640,12 +639,10 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(BytecodeVisitor bytecodeVisitor, final Map<CFGNode, Integer> needingLabels, final int[] nextLabel) {
-			checkIfNeedingLabel(bytecodeVisitor, needingLabels, this);
+		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
+			checkIfNeedingLabel(bytecodeVisitor, this);
 			
-			String label = calculateLabel(bytecodeVisitor, needingLabels, nextLabel, next);
-			
-			bytecodeVisitor.visit(new Bytecode.UnconditionalJump(Code.Goto(label)));
+			gotoLabel(calculateLabel(next), bytecodeVisitor);
 		}
 	}
 
@@ -697,12 +694,12 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(BytecodeVisitor bytecodeVisitor, final Map<CFGNode, Integer> needingLabels, final int[] nextLabel) {
-			checkIfNeedingLabel(bytecodeVisitor, needingLabels, this);
+		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
+			checkIfNeedingLabel(bytecodeVisitor, this);
 			
 			bytecodeVisitor.visit(new Bytecode.LoopEnd(Code.LoopEnd(loop.loopEndLabel)));
 			
-			calculateLabel(bytecodeVisitor, needingLabels, nextLabel, next);
+			gotoLabel(calculateLabel(next), bytecodeVisitor);
 		}
 	}
 
@@ -798,14 +795,14 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(BytecodeVisitor bytecodeVisitor, final Map<CFGNode, Integer> needingLabels, final int[] nextLabel) {
-			checkIfNeedingLabel(bytecodeVisitor, needingLabels, this);
+		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
+			checkIfNeedingLabel(bytecodeVisitor, this);
 
-			String defaultLabel = calculateLabel(bytecodeVisitor, needingLabels, nextLabel, defaultBranch);
+			String defaultLabel = calculateLabel(defaultBranch);
 			
 			List<Pair<Constant, String>> cases = new ArrayList<Pair<Constant, String>>();
 			for(Pair<Constant, CFGNode> branch : branches) {
-				String label = calculateLabel(bytecodeVisitor, needingLabels, nextLabel, branch.second());
+				String label = calculateLabel(branch.second());
 				
 				cases.add(new Pair<Constant, String>(branch.first(), label));
 			}
@@ -886,11 +883,11 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(BytecodeVisitor bytecodeVisitor, final Map<CFGNode, Integer> needingLabels, final int[] nextLabel) {
-			checkIfNeedingLabel(bytecodeVisitor, needingLabels, this);
+		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
+			checkIfNeedingLabel(bytecodeVisitor, this);
 			
-			String metLabel = calculateLabel(bytecodeVisitor, needingLabels, nextLabel, conditionMet);
-			String unmetLabel = calculateLabel(bytecodeVisitor, needingLabels, nextLabel, conditionUnmet);
+			String metLabel = calculateLabel(conditionMet);
+			String unmetLabel = calculateLabel(conditionUnmet);
 			
 			if(conditionalJump instanceof Bytecode.ComparisonBasedJump) {
 				Bytecode.ComparisonBasedJump ifBytecode = (Bytecode.ComparisonBasedJump)conditionalJump;
@@ -961,8 +958,8 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(BytecodeVisitor bytecodeVisitor, Map<CFGNode, Integer> needingLabels, int[] nextLabel) {
-			checkIfNeedingLabel(bytecodeVisitor, needingLabels, this);
+		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
+			checkIfNeedingLabel(bytecodeVisitor, this);
 			
 			if(bytecode.isVoid()) {
 				bytecodeVisitor.visit(new Bytecode.Return(Code.Return()));
@@ -1039,7 +1036,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(BytecodeVisitor bytecodeVisitor, Map<CFGNode, Integer> needingLabels, int[] nextLabel) {
+		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
 			throw new InternalError(this.getClass().getSimpleName() + "  cannot be visited by BytecodeVisitor");
 		}
 	}
@@ -1095,7 +1092,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void forBytecode(BytecodeVisitor bytecodeVisitor, Map<CFGNode, Integer> needingLabels, int[] nextLabel) {
+		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
 		}
 
 	}

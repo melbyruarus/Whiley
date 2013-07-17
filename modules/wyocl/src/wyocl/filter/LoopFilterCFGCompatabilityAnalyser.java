@@ -9,9 +9,9 @@ import java.util.Stack;
 
 import wyocl.ar.Bytecode;
 import wyocl.ar.CFGNode;
-import wyocl.ar.DFGNode;
 import wyocl.ar.CFGNode.LoopNode;
 import wyocl.ar.CFGNode.VanillaCFGNode;
+import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator;
 import wyocl.ar.utils.CFGIterator.CFGNodeCallback;
 import wyocl.ar.utils.CFGIterator.Entry;
@@ -149,41 +149,46 @@ public class LoopFilterCFGCompatabilityAnalyser {
 			if(DEBUG) { System.err.println("Determine bytecode compatability"); }
 
 			for(final LoopDescription loop : allLoops.values()) {
-				loop.bytecodesCompatable = true;
-
-				Set<CFGNode> endNodes = new HashSet<CFGNode>();
-				loop.loopNode.getScopeNextNodes(endNodes);
-
-				CFGIterator.iterateCFGFlow(new CFGNodeCallback() {
-					@Override
-					public boolean process(CFGNode node) {
-						if(node instanceof VanillaCFGNode) {
-							VanillaCFGNode vanilaNode = (VanillaCFGNode)node;
-							for(Bytecode b : vanilaNode.body.instructions) {
-								if(!(b instanceof Bytecode.GPUSupportedBytecode)) {
-									loop.bytecodesCompatable = false;
-									if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported bytecode contained: "+b); }
-									return false;
+				if(loop.loopNode instanceof CFGNode.ForAllLoopNode || loop.loopNode instanceof CFGNode.ForLoopNode) {
+					loop.bytecodesCompatable = true;
+	
+					Set<CFGNode> endNodes = new HashSet<CFGNode>();
+					loop.loopNode.getScopeNextNodes(endNodes);
+	
+					CFGIterator.iterateCFGFlow(new CFGNodeCallback() {
+						@Override
+						public boolean process(CFGNode node) {
+							if(node instanceof VanillaCFGNode) {
+								VanillaCFGNode vanilaNode = (VanillaCFGNode)node;
+								for(Bytecode b : vanilaNode.body.instructions) {
+									if(!(b instanceof Bytecode.GPUSupportedBytecode)) {
+										loop.bytecodesCompatable = false;
+										if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported bytecode contained: "+b); }
+										return false;
+									}
 								}
 							}
-						}
-						else if(!(node instanceof CFGNode.GPUSupportedNode)) {
-							loop.bytecodesCompatable = false;
-							if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported node contained: "+node); }
-							return false;
-						}
-						else {
-							CFGNode.GPUSupportedNode gpuNode = (CFGNode.GPUSupportedNode)node;
-							if(!gpuNode.isGPUSupported()) {
+							else if(!(node instanceof CFGNode.GPUSupportedNode)) {
 								loop.bytecodesCompatable = false;
 								if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported node contained: "+node); }
 								return false;
 							}
+							else {
+								CFGNode.GPUSupportedNode gpuNode = (CFGNode.GPUSupportedNode)node;
+								if(!gpuNode.isGPUSupported()) {
+									loop.bytecodesCompatable = false;
+									if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported node contained: "+node); }
+									return false;
+								}
+							}
+	
+							return true;
 						}
-
-						return true;
-					}
-				}, loop.loopNode, endNodes);
+					}, loop.loopNode, endNodes);
+				}
+				else {
+					loop.bytecodesCompatable = false;
+				}
 			}
 		}
 
