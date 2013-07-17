@@ -429,7 +429,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			}
 			startDFG.lastModified.addAll(writeStartInfo.lastNodes);
 			if(readStartInfo != null) {
-				startDFG.lastRead.addAll(readStartInfo.lastNodes);
+				startDFG.lastReadOrWrite.addAll(readStartInfo.lastNodes);
 			}
 
 			endRegisterInfo.readWriteInfo.registerMapping.put(startRegister, new DFGGenerator.DFGInfo(startDFG));
@@ -443,7 +443,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			}
 			endDFG.lastModified.addAll(writeEndInfo.lastNodes);
 			if(readEndInfo != null) {
-				endDFG.lastRead.addAll(readEndInfo.lastNodes);
+				endDFG.lastReadOrWrite.addAll(readEndInfo.lastNodes);
 			}
 			
 			endRegisterInfo.readWriteInfo.registerMapping.put(endRegister, new DFGGenerator.DFGInfo(endDFG));
@@ -459,7 +459,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 				indexDFG.lastModified.addAll(writeIndexInfo.lastNodes);
 			}
 			if(readIndexInfo != null) {
-				indexDFG.lastRead.addAll(readIndexInfo.lastNodes);
+				indexDFG.lastReadOrWrite.addAll(readIndexInfo.lastNodes);
 			}
 
 			endRegisterInfo.readWriteInfo.registerMapping.put(indexRegister, new DFGGenerator.DFGInfo(indexDFG));

@@ -657,7 +657,7 @@ public class OpenCLOpWriter {
 
 		protected void writeBinary(final Binary b) {
 			if(!(b.getType() instanceof Type.Leaf)){
-				throw new RuntimeException("Dont know how to handle nonleaf types for BinArithOp: "+b.getType());
+				throw new RuntimeException("Dont know how to handle nonleaf types for BinArithOp: "+ b.getType() + ", operation: " + b.getArithKind() + ", registers: " + b.getLeftOperand() + " & " + b.getRightOperand());
 			}
 
 			writeIndents();

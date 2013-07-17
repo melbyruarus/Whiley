@@ -45,7 +45,33 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		return wyilLangCode;
 	}
 	
+	/**
+	 * This interface signifies that a bytecode is supported by the OpenCLWriter
+	 * and can be executed on a GPU
+	 * 
+	 * @author melby
+	 *
+	 */
 	public static interface GPUSupportedBytecode {
+	}
+	
+	/**
+	 * This interface is used to indicate that a bytecode has no side effects other
+	 * than those detailed in writtenDFGNodes. E.g. all arithemetic operations are
+	 * side effect free, but this cannot be certain for bytecodes such as return, or
+	 * exceptions, or functions, which may perform io or modify other datastructures/
+	 * change control flow unexpectedly. If the operations a bytecode does cannot be
+	 * summarised in written/readDFGNodes then it should not implement this interface,
+	 * otherwise it may.
+	 * 
+	 * This interface is currently used to determine which bytecodes can be removed
+	 * during the dead code elimination stage if their writtenDFGNodes is empty
+	 * or all nodes in writtenDFGNodes are never read.
+	 * 
+	 * @author melby
+	 *
+	 */
+	public static interface SideeffectFree {
 	}
 		
 	public static interface Data {
@@ -77,7 +103,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		public String name();
 	}
 	
-	public static class Unary extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode {
+	public static class Unary extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.UnArithOp code;
 		
 		public Unary(Code.UnArithOp code) { super(code); this.code = code; }
@@ -105,7 +131,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class Binary extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode {
+	public static class Binary extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.BinArithOp code;
 		
 		public Binary(Code.BinArithOp code) { super(code); this.code = code; }
@@ -138,7 +164,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class ConstLoad extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode {
+	public static class ConstLoad extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.Const code;
 		
 		public ConstLoad(Code.Const code) { super(code); this.code = code; }
@@ -157,7 +183,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class Assign extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode {
+	public static class Assign extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.Assign code;
 		
 		public Assign(Code.Assign code) { super(code); this.code = code; }
@@ -181,7 +207,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class Move extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode {
+	public static class Move extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.Move code;
 		
 		public Move(Code.Move code) { super(code); this.code = code; }
@@ -205,7 +231,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class Convert extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode {
+	public static class Convert extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.Convert code;
 		
 		public Convert(Code.Convert code) { super(code); this.code = code; }
@@ -229,7 +255,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class Load extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode {
+	public static class Load extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.IndexOf code;
 		
 		public Load(Code.IndexOf code) { super(code); this.code = code; }
@@ -258,7 +284,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class LengthOf extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode {
+	public static class LengthOf extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.LengthOf code;
 		
 		public LengthOf(Code.LengthOf code) { super(code); this.code = code; }
@@ -282,7 +308,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class TupleLoad extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode {
+	public static class TupleLoad extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.TupleLoad code;
 		
 		public TupleLoad(Code.TupleLoad code) { super(code); this.code = code; }
@@ -310,7 +336,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class Update extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode {
+	public static class Update extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.Update code;
 		
 		public Update(Code.Update code) { super(code); this.code = code; }
@@ -342,7 +368,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class BinStringOp extends Bytecode implements Data {
+	public static class BinStringOp extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.BinStringOp code;
 		
 		public BinStringOp(wyil.lang.Code.BinStringOp code) {
@@ -374,7 +400,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class BinSetOp extends Bytecode implements Data {
+	public static class BinSetOp extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.BinSetOp code;
 		
 		public BinSetOp(wyil.lang.Code.BinSetOp code) { super(code); this.code = code; }
@@ -403,7 +429,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class BinListOp extends Bytecode implements Data {
+	public static class BinListOp extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.BinListOp code;
 		
 		public BinListOp(wyil.lang.Code.BinListOp code) { super(code); this.code = code; }
@@ -432,7 +458,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class Void extends Bytecode implements Data {
+	public static class Void extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.Void code;
 		
 		public Void(wyil.lang.Code.Void code) { super(code); this.code = code; }
@@ -454,7 +480,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class SubString extends Bytecode implements Data {
+	public static class SubString extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.SubString code;
 		
 		public SubString(wyil.lang.Code.SubString code) { super(code); this.code = code; }
@@ -468,7 +494,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class SubList extends Bytecode implements Data {
+	public static class SubList extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.SubList code;
 		
 		public SubList(wyil.lang.Code.SubList code) { super(code); this.code = code; }
@@ -482,7 +508,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class Not extends Bytecode implements Data, Bytecode.GPUSupportedBytecode {
+	public static class Not extends Bytecode implements Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.Not code;
 		
 		public Not(wyil.lang.Code.Not code) { super(code); this.code = code; }
@@ -506,7 +532,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class NewTuple extends Bytecode implements Data {
+	public static class NewTuple extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.NewTuple code;
 		
 		public NewTuple(wyil.lang.Code.NewTuple code) { super(code); this.code = code; }
@@ -520,7 +546,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class NewList extends Bytecode implements Data {
+	public static class NewList extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.NewList code;
 		
 		public NewList(wyil.lang.Code.NewList code) { super(code); this.code = code; }
@@ -534,7 +560,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class NewRecord extends Bytecode implements Data {
+	public static class NewRecord extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.NewRecord code;
 		
 		public NewRecord(wyil.lang.Code.NewRecord code) { super(code); this.code = code; }
@@ -548,7 +574,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class NewMap extends Bytecode implements Data {
+	public static class NewMap extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.NewMap code;
 		
 		public NewMap(wyil.lang.Code.NewMap code) { super(code); this.code = code; }
@@ -562,7 +588,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class NewObject extends Bytecode implements Data {
+	public static class NewObject extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.NewObject code;
 		
 		public NewObject(wyil.lang.Code.NewObject code) { super(code); this.code = code; }
@@ -574,7 +600,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class NewSet extends Bytecode implements Data {
+	public static class NewSet extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.NewSet code;
 		
 		public NewSet(wyil.lang.Code.NewSet code) { super(code); this.code = code; }
@@ -588,7 +614,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class Invert extends Bytecode implements Data {
+	public static class Invert extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.Invert code;
 		
 		public Invert(wyil.lang.Code.Invert code) { super(code); this.code = code; }
@@ -600,7 +626,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class FieldLoad extends Bytecode implements Data {
+	public static class FieldLoad extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.FieldLoad code;
 		
 		public FieldLoad(wyil.lang.Code.FieldLoad code) { super(code); this.code = code; }
@@ -612,7 +638,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 
-	public static class Dereference extends Bytecode implements Data {
+	public static class Dereference extends Bytecode implements Data, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.Dereference code;
 		
 		public Dereference(wyil.lang.Code.Dereference code) { super(code); this.code = code; }
@@ -635,7 +661,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class ForAll extends Bytecode implements Bytecode.Loop, Bytecode.GPUSupportedBytecode {
+	public static class ForAll extends Bytecode implements Bytecode.Loop, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.ForAll code;
 		
 		public ForAll(Code.ForAll code) { super(code); this.code = code; }
@@ -676,7 +702,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class While extends Bytecode implements Bytecode.Loop, Bytecode.GPUSupportedBytecode {
+	public static class While extends Bytecode implements Bytecode.Loop, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.Loop code;
 		
 		public While(Code.Loop code) { super(code); this.code = code; }
@@ -691,7 +717,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class UnconditionalJump extends Bytecode implements Bytecode.Jump, Bytecode.GPUSupportedBytecode {
+	public static class UnconditionalJump extends Bytecode implements Bytecode.Jump, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.Goto code;
 		
 		public UnconditionalJump(Code.Goto code) { super(code); this.code = code; }
@@ -705,7 +731,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class ComparisonBasedJump extends Bytecode implements Bytecode.ConditionalJump, Bytecode.GPUSupportedBytecode {
+	public static class ComparisonBasedJump extends Bytecode implements Bytecode.ConditionalJump, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.If code;
 		
 		public ComparisonBasedJump(Code.If code) { super(code); this.code = code; }
@@ -744,7 +770,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class TypeBasedJump extends Bytecode implements Bytecode.ConditionalJump {
+	public static class TypeBasedJump extends Bytecode implements Bytecode.ConditionalJump, Bytecode.SideeffectFree {
 		private final wyil.lang.Code.IfIs code;
 		
 		public TypeBasedJump(wyil.lang.Code.IfIs code) { super(code); this.code = code; }
@@ -777,7 +803,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class Switch extends Bytecode implements Bytecode.Jump, Bytecode.GPUSupportedBytecode {
+	public static class Switch extends Bytecode implements Bytecode.Jump, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.Switch code;
 		
 		public Switch(Code.Switch code) { super(code); this.code = code; }
@@ -804,7 +830,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class Label extends Bytecode implements Bytecode.Control, Bytecode.Target, Bytecode.GPUSupportedBytecode {
+	public static class Label extends Bytecode implements Bytecode.Control, Bytecode.Target, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.Label code;
 		
 		public Label(Code.Label code) { super(code); this.code = code; }
@@ -819,7 +845,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
-	public static class LoopEnd extends Bytecode implements Bytecode.Control, Bytecode.Target, Bytecode.GPUSupportedBytecode {
+	public static class LoopEnd extends Bytecode implements Bytecode.Control, Bytecode.Target, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
 		private final Code.LoopEnd code;
 		
 		public LoopEnd(Code.LoopEnd code) { super(code); this.code = code; }

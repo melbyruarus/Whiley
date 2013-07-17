@@ -5,6 +5,7 @@ import java.util.Map;
 import wyocl.ar.CFGNode;
 import wyocl.ar.DFGNode;
 import wyocl.filter.LoopFilterCFGCompatabilityAnalyser.AnalyserResult;
+import wyocl.filter.optimizer.stages.DeadCodeEliminationStage;
 import wyocl.filter.optimizer.stages.ForallToForOptimisationStage;
 
 public class CFGOptimizer {
@@ -15,12 +16,9 @@ public class CFGOptimizer {
 		ForallToForOptimisationStage.process(dummyNode, analyserResult, argumentRegisters);
 		
 		// FIXME: performConstantPropogation(dummyNode);
-		analyseDFGForDeadCode(dummyNode);
+		
+		DeadCodeEliminationStage.process(dummyNode, analyserResult, argumentRegisters);
 		
 		return dummyNode.next;
-	}
-
-	private static void analyseDFGForDeadCode(CFGNode.DummyNode dummyNode) {
-		// TODO: implement
 	}
 }
