@@ -808,6 +808,10 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			}
 			bytecodeVisitor.visit(new Bytecode.Switch(Code.Switch(switchBytecode.getType(), getCheckedRegister(), defaultLabel, cases)));
 		}
+
+		public Type getCheckedType() {
+			return switchBytecode.getType();
+		}
 	}
 
 	/**

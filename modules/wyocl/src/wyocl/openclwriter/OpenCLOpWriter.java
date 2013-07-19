@@ -121,7 +121,7 @@ public class OpenCLOpWriter {
 			if(rootNode instanceof CFGNode.ForAllLoopNode) {
 				Bytecode.ForAll forAll = ((CFGNode.ForAllLoopNode)loopNode).getBytecode();
 
-				typeWriter.writeListAccessor(forAll.getSourceRegister(), new ExpressionWriter() {
+				typeWriter.writeListAccessor(forAll.getSourceRegister(), forAll.getSourceType(), new ExpressionWriter() {
 					@Override
 					public void writeExpression(PrintWriter writer) {
 						writeKernelGlobalIndex(0, writer); // TODO: Support multiple dimensions
@@ -288,7 +288,7 @@ public class OpenCLOpWriter {
 
 				writeIndents();
 				writer.print("if(");
-				writeComparitor(comparison, ifCode.getLeftOperand(), ifCode.getRightOperand());
+				writeComparitor(comparison, ifCode.getLeftOperand(), ifCode.getRightOperand(), ifCode.getType());
 				writer.print(") { ");
 				checkAndAddJumpsIfNeeded(node, whenMet, 0, false);
 				writer.print(" }");
@@ -310,15 +310,15 @@ public class OpenCLOpWriter {
 			writer.print("for(");
 			typeWriter.writeLHS(node.getIndexRegister(), node.getType(), writer);
 			writer.print(" = ");
-			typeWriter.writeRHS(node.getStartRegister(), writer);
+			typeWriter.writeRHS(node.getStartRegister(), node.getType(), writer);
 			writer.print("; ");
 			typeWriter.writeLHS(node.getIndexRegister(), node.getType(), writer);
 			writer.print(" < ");
-			typeWriter.writeRHS(node.getEndRegister(), writer);
+			typeWriter.writeRHS(node.getEndRegister(), node.getType(), writer);
 			writer.print("; ");
 			typeWriter.writeLHS(node.getIndexRegister(), node.getType(), writer);
 			writer.print(" = ");
-			typeWriter.writeRHS(node.getIndexRegister(), writer);
+			typeWriter.writeRHS(node.getIndexRegister(), node.getType(), writer);
 			writer.print(" + 1) {\n");
 
 			checkAndAddJumpsIfNeeded(node, node.body);
@@ -336,7 +336,7 @@ public class OpenCLOpWriter {
 			writer.print(" = 0; loopIndex");
 			writer.print(index);
 			writer.print(" < ");
-			typeWriter.writeListLength(forAll.getSourceRegister(), writer);
+			typeWriter.writeListLength(forAll.getSourceRegister(), forAll.getSourceType(), writer);
 			writer.print("; loopIndex");
 			writer.print(index);
 			writer.print("++) {");
@@ -344,7 +344,7 @@ public class OpenCLOpWriter {
 			writeIndents(1);
 			typeWriter.writeLHS(forAll.getIndexRegister(), forAll.getIndexType(), writer);
 			writer.print(" = ");
-			typeWriter.writeListAccessor(forAll.getSourceRegister(), new OpenCLTypeWriter.ExpressionWriter() {
+			typeWriter.writeListAccessor(forAll.getSourceRegister(), forAll.getSourceType(), new OpenCLTypeWriter.ExpressionWriter() {
 				@Override
 				public void writeExpression(PrintWriter writer) {
 					writer.print("loopIndex");
@@ -376,7 +376,7 @@ public class OpenCLOpWriter {
 				writer.print("if(");
 				writer.print(caseStatement.first());
 				writer.print(" == ");
-				typeWriter.writeRHS(node.getCheckedRegister(), writer);
+				typeWriter.writeRHS(node.getCheckedRegister(), node.getCheckedType(), writer);
 				writer.print(") { ");
 				checkAndAddJumpsIfNeeded(node, caseStatement.second(), 0, false);
 				writer.print(" }");
@@ -408,7 +408,7 @@ public class OpenCLOpWriter {
 				}
 				else {
 					writer.print("return ");
-					typeWriter.writeRHS(returnBytecode.getOperand(), writer);
+					typeWriter.writeRHS(returnBytecode.getOperand(), returnBytecode.getType(), writer);
 					writeLineEnd(returnBytecode);
 					return;
 				}
@@ -496,7 +496,7 @@ public class OpenCLOpWriter {
 
 					@Override
 					public void visitConvert(Convert b) {
-						throw new RuntimeException("Unexecpeted bytecode: "+b);
+						writeConvert(b);
 					}
 
 					@Override
@@ -643,7 +643,7 @@ public class OpenCLOpWriter {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
 			writer.print(" = !");
-			typeWriter.writeRHS(b.getOperand(), writer);
+			typeWriter.writeRHS(b.getOperand(), b.getType(), writer);
 			writeLineEnd(b);
 		}
 
@@ -651,7 +651,7 @@ public class OpenCLOpWriter {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
 			writer.print(" = ");
-			typeWriter.writeRHS(b.getOperand(), writer);
+			typeWriter.writeRHS(b.getOperand(), b.getType(), writer);
 			writeLineEnd(b);
 		}
 
@@ -667,15 +667,23 @@ public class OpenCLOpWriter {
 
 				@Override
 				public void writeExpression(PrintWriter writer) {
-					typeWriter.writeRHS(b.getLeftOperand(), writer);
+					typeWriter.writeRHS(b.getLeftOperand(), b.getType(), writer);
 				}
 			}, new ExpressionWriter() {
 
 				@Override
 				public void writeExpression(PrintWriter writer) {
-					typeWriter.writeRHS(b.getRightOperand(), writer);
+					typeWriter.writeRHS(b.getRightOperand(), b.getType(), writer);
 				}
 			});
+			writeLineEnd(b);
+		}
+		
+		protected void writeConvert(Convert b) {
+			writeIndents();			
+			typeWriter.writeLHS(b.getTarget(), b.getToType(), writer);
+			writer.print(" = ");
+			typeWriter.writeRHS(b.getOperand(), b.getFromType(), writer);
 			writeLineEnd(b);
 		}
 
@@ -696,10 +704,10 @@ public class OpenCLOpWriter {
 			writer.print(functionTranslator.translateFunctionName(b));
 			writer.print('(');
 			String sep = "";
-			for(int arg : b.getOperands()) {
+			for(int index = 0; index < b.getOperands().length; index++) {
 				writer.print(sep);
 				sep = ", ";
-				typeWriter.writeRHS(arg, writer);
+				typeWriter.writeRHS(b.getOperands()[index], b.getType().params().get(index), writer);
 			}
 			writer.print(')');
 			writeLineEnd(b);
@@ -709,7 +717,7 @@ public class OpenCLOpWriter {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType().element(), writer);
 			writer.print(" = ");
-			typeWriter.writeListLength(b.getOperand(), writer);
+			typeWriter.writeListLength(b.getOperand(), (Type)b.getType(), writer);
 			writeLineEnd(b);
 		}
 
@@ -717,10 +725,10 @@ public class OpenCLOpWriter {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType().element(), writer);
 			writer.print(" = ");
-			typeWriter.writeListAccessor(b.getLeftOperand(), new ExpressionWriter() {
+			typeWriter.writeListAccessor(b.getLeftOperand(), (Type)b.getType(), new ExpressionWriter() {
 				@Override
 				public void writeExpression(PrintWriter writer) {
-					typeWriter.writeRHS(b.getRightOperand(), writer);
+					typeWriter.writeRHS(b.getRightOperand(), b.getAssignedType(), writer);
 				}
 			}, writer);
 			writeLineEnd(b);
@@ -730,7 +738,7 @@ public class OpenCLOpWriter {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
 			writer.print(" = ");
-			typeWriter.writeRHS(b.getOperand(), writer);
+			typeWriter.writeRHS(b.getOperand(), b.getType(), writer);
 			writeLineEnd(b);
 		}
 
@@ -738,7 +746,7 @@ public class OpenCLOpWriter {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getType().element(b.getIndex()), writer);
 			writer.print(" = ");
-			typeWriter.writeTupleAccessor(b.getOperand(), new ExpressionWriter() {
+			typeWriter.writeTupleAccessor(b.getOperand(), (Type)b.getType(), new ExpressionWriter() {
 				@Override
 				public void writeExpression(PrintWriter writer) {
 					writer.print(b.getIndex());
@@ -758,27 +766,27 @@ public class OpenCLOpWriter {
 			writePrimitiveUnArithOp(b.getArithKind(), (Type.Leaf)b.getType(), new ExpressionWriter() {
 				@Override
 				public void writeExpression(PrintWriter writer) {
-					typeWriter.writeRHS(b.getOperand(), writer);
+					typeWriter.writeRHS(b.getOperand(), b.getType(), writer);
 				}
 			});
 			writeLineEnd(b);
 		}
 
-		protected void writeUpdate(Update b) {
+		protected void writeUpdate(final Update b) {
 			// TODO: implement this properly
-			if(b.getDataStructureType() instanceof Type.List) {
+			if(b.getDataStructureBeforeType() instanceof Type.List) {
 				for(Code.LVal<Type.EffectiveList> _lv : b.getLValueIterator()) {
 					final Code.ListLVal lv = (Code.ListLVal)_lv;
 
 					writeIndents();
-					typeWriter.writeListAccessor(b.getTarget(), new ExpressionWriter() {
+					typeWriter.writeListAccessor(b.getTarget(), b.getDataStructureBeforeType(), new ExpressionWriter() {
 						@Override
 						public void writeExpression(PrintWriter writer) {
-							typeWriter.writeRHS(lv.indexOperand, writer);
+							typeWriter.writeRHS(lv.indexOperand, b.readDFGNodes.get(lv.indexOperand).type, writer);
 						}
 					}, writer);
 					writer.print(" = ");
-					typeWriter.writeRHS(b.getOperand(), writer); // TODO: support more than one
+					typeWriter.writeRHS(b.getOperand(), b.getRHSType(), writer); // TODO: support more than one
 					writeLineEnd(b);
 				}
 			}
@@ -948,7 +956,7 @@ public class OpenCLOpWriter {
 			throw new InternalError("Oops");
 		}
 
-		private void writeComparitor(Comparator op, int leftOperand, int rightOperand) {
+		private void writeComparitor(Comparator op, int leftOperand, int rightOperand, Type type) {
 			writer.print('(');
 			switch(op) {
 				case SUBSET:
@@ -958,34 +966,34 @@ public class OpenCLOpWriter {
 				case ELEMOF:
 					throw new NotImplementedException();
 				case EQ:
-					typeWriter.writeRHS(leftOperand, writer);
+					typeWriter.writeRHS(leftOperand, type, writer);
 					writer.print(" == ");
-					typeWriter.writeRHS(rightOperand, writer);
+					typeWriter.writeRHS(rightOperand, type, writer);
 					break;
 				case GT:
-					typeWriter.writeRHS(leftOperand, writer);
+					typeWriter.writeRHS(leftOperand, type, writer);
 					writer.print(" > ");
-					typeWriter.writeRHS(rightOperand, writer);
+					typeWriter.writeRHS(rightOperand, type, writer);
 					break;
 				case GTEQ:
-					typeWriter.writeRHS(leftOperand, writer);
+					typeWriter.writeRHS(leftOperand, type, writer);
 					writer.print(" >= ");
-					typeWriter.writeRHS(rightOperand, writer);
+					typeWriter.writeRHS(rightOperand, type, writer);
 					break;
 				case LT:
-					typeWriter.writeRHS(leftOperand, writer);
+					typeWriter.writeRHS(leftOperand, type, writer);
 					writer.print(" < ");
-					typeWriter.writeRHS(rightOperand, writer);
+					typeWriter.writeRHS(rightOperand, type, writer);
 					break;
 				case LTEQ:
-					typeWriter.writeRHS(leftOperand, writer);
+					typeWriter.writeRHS(leftOperand, type, writer);
 					writer.print(" <= ");
-					typeWriter.writeRHS(rightOperand, writer);
+					typeWriter.writeRHS(rightOperand, type, writer);
 					break;
 				case NEQ:
-					typeWriter.writeRHS(leftOperand, writer);
+					typeWriter.writeRHS(leftOperand, type, writer);
 					writer.print(" != ");
-					typeWriter.writeRHS(rightOperand, writer);
+					typeWriter.writeRHS(rightOperand, type, writer);
 					break;
 			}
 			writer.print(')');

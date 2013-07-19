@@ -246,7 +246,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 			return code.target;
 		}
 
-		public Type getType() {
+		public Type getToType() {
+			return code.result;
+		}
+		
+		public Type getFromType() {
 			return code.type;
 		}
 		
@@ -281,6 +285,10 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		
 		public int getRightOperand() {
 			return code.rightOperand;
+		}
+
+		public Type getAssignedType() {
+			return code.assignedType();
 		}
 	}
 	
@@ -350,8 +358,12 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 			}
 		}
 
-		public Type getDataStructureType() {
+		public Type getDataStructureBeforeType() {
 			return code.type;
+		}
+		
+		public Type getDataStructureAfterType() {
+			return code.afterType;
 		}
 
 		@SuppressWarnings("rawtypes")
@@ -365,6 +377,10 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 
 		public int getOperand() {
 			return code.operand;
+		}
+
+		public Type getRHSType() {
+			return code.rhs();
 		}
 	}
 	

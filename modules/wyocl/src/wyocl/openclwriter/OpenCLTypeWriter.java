@@ -7,10 +7,11 @@ import java.util.HashMap;
 import wyil.lang.Type;
 import wyocl.filter.Argument;
 import wyocl.util.IndentedPrintWriter;
+import wyocl.util.SymbolUtilities;
 
 public class OpenCLTypeWriter {
-	private static final String VAR_PREFIX = "register_";
-	private HashMap<Integer, VariableDefn> definedVariables = new HashMap<Integer, VariableDefn>();
+	private static final String VAR_PREFIX = "r";
+	private HashMap<Integer, HashMap<Type, VariableDefn>> definedVariables = new HashMap<Integer, HashMap<Type, VariableDefn>>();
 	private final StringWriter boilerPlateStringWriter = new StringWriter();
 	private final PrintWriter boilerPlateWriter = new IndentedPrintWriter(boilerPlateStringWriter, 1);
 	
@@ -50,18 +51,16 @@ public class OpenCLTypeWriter {
 			if(asPointer) {
 				writer.print('*');
 			}
-			writer.print(VAR_PREFIX);
-			writer.print(register);
+			writer.print(variableName(register, type));
 		}
-		
+
 		@Override
 		public void writeAccessor(PrintWriter writer) {
 			writer.print('(');
 			if(asPointer) {
 				writer.print('*');
 			}
-			writer.print(VAR_PREFIX);
-			writer.print(register);
+			writer.print(variableName(register, type));
 			writer.print(')');
 		}
 	}
@@ -84,27 +83,24 @@ public class OpenCLTypeWriter {
 				throw new RuntimeException("Currently only support lists of primitive types, don't support: "+type);
 			}
 			writer.print(primitiveType((Type.Leaf)type.element()));
-			writer.print(" *"+VAR_PREFIX);
-			writer.print(register);
+			writer.print(" *"+variableName(register, type));
 			
 			boilerPlateWriter.println("// Begin register "+register+" list unpacking");
-			boilerPlateWriter.println("int "+VAR_PREFIX+register+SIZE_SUFFIX+" = "+VAR_PREFIX+register+"?((__global int *)"+VAR_PREFIX+register+")[0]:0;");
-			boilerPlateWriter.println(VAR_PREFIX+register+" = (__global "+primitiveType((Type.Leaf)type.element())+" *)(((int *)"+VAR_PREFIX+register+") + 1);");
+			boilerPlateWriter.println("int "+variableName(register, type)+SIZE_SUFFIX+" = "+variableName(register, type)+"?((__global int *)"+variableName(register, type)+")[0]:0;");
+			boilerPlateWriter.println(variableName(register, type)+" = (__global "+primitiveType((Type.Leaf)type.element())+" *)(((int *)"+variableName(register, type)+") + 1);");
 			boilerPlateWriter.println("// End register "+register+" list unpacking");
 		}
 		
 		@Override
 		public void writeAccessor(PrintWriter writer) {
 			writer.print('(');
-			writer.print(VAR_PREFIX);
-			writer.print(register);
+			writer.print(variableName(register, type));
 			writer.print(')');
 		}
 		
 		public void writeAccessor(ExpressionWriter indexExpression, PrintWriter writer) {
 			writer.print('(');
-			writer.print(VAR_PREFIX);
-			writer.print(register);
+			writer.print(variableName(register, type));
 			writer.print('[');
 			indexExpression.writeExpression(writer);
 			writer.print(']');
@@ -113,8 +109,7 @@ public class OpenCLTypeWriter {
 		
 		public void writeLengthAccessor(PrintWriter writer) {
 			writer.print('(');
-			writer.print(VAR_PREFIX);
-			writer.print(register);
+			writer.print(variableName(register, type));
 			writer.print(SIZE_SUFFIX);
 			writer.print(')');
 		}
@@ -138,27 +133,24 @@ public class OpenCLTypeWriter {
 				throw new RuntimeException("Currently only support tuples of primitive types, don't support: "+type);
 			}
 			writer.print(primitiveType((Type.Leaf)type.element(0)));
-			writer.print(" *"+VAR_PREFIX);
-			writer.print(register);
+			writer.print(" *"+variableName(register, type));
 			
 			boilerPlateWriter.println("// Begin register "+register+" tuple unpacking");
-			boilerPlateWriter.println("int "+VAR_PREFIX+register+SIZE_SUFFIX+" = "+VAR_PREFIX+register+"?((__global int *)"+VAR_PREFIX+register+")[0]:0;");
-			boilerPlateWriter.println(VAR_PREFIX+register+" = (__global "+primitiveType((Type.Leaf)type.element(0))+" *)(((int *)"+VAR_PREFIX+register+") + 1);");
+			boilerPlateWriter.println("int "+variableName(register, type)+SIZE_SUFFIX+" = "+variableName(register, type)+"?((__global int *)"+variableName(register, type)+")[0]:0;");
+			boilerPlateWriter.println(variableName(register, type)+" = (__global "+primitiveType((Type.Leaf)type.element(0))+" *)(((int *)"+variableName(register, type)+") + 1);");
 			boilerPlateWriter.println("// End register "+register+" tuple unpacking");
 		}
 		
 		@Override
 		public void writeAccessor(PrintWriter writer) {
 			writer.print('(');
-			writer.print(VAR_PREFIX);
-			writer.print(register);
+			writer.print(variableName(register, type));
 			writer.print(')');
 		}
 		
 		public void writeAccessor(ExpressionWriter indexExpression, PrintWriter writer) {
 			writer.print('(');
-			writer.print(VAR_PREFIX);
-			writer.print(register);
+			writer.print(variableName(register, type));
 			writer.print('[');
 			indexExpression.writeExpression(writer);
 			writer.print(']');
@@ -206,83 +198,85 @@ public class OpenCLTypeWriter {
 	private void writeVariableDecl(Type.Leaf type, boolean asPointer, int register, PrintWriter writer) {
 		PrimitiveDefn prim = new PrimitiveDefn(register, type, asPointer);
 		prim.writeDecleration(writer, boilerPlateWriter);
-		definedVariables.put(register, prim);
+		defineVariable(register, type, prim);
 	}
 
 	private void writeVariableDecl(Type.List type, boolean asPointer, int register, PrintWriter writer) {
 		ListDefn list = new ListDefn(register, type);
 		list.writeDecleration(writer, boilerPlateWriter);
-		definedVariables.put(register, list);
+		defineVariable(register, type, list);
 	}
 	
 	private void writeVariableDecl(Type.Tuple type, boolean asPointer, int register, PrintWriter writer) {
 		TupleDefn tuple = new TupleDefn(register, type);
 		tuple.writeDecleration(writer, boilerPlateWriter);
-		definedVariables.put(register, tuple);
+		defineVariable(register, type, tuple);
 	}
 	
 	protected void writeLHS(int target, Type type, PrintWriter writer) {
-		if(definedVariables.containsKey(target)) {
-			definedVariables.get(target).writeAccessor(writer);
+		VariableDefn defn = getVariable(target, type);
+		if(defn != null) {
+			defn.writeAccessor(writer);
 		}
 		else {
 			writeVariableDecl(type, false, target, boilerPlateWriter);
 			boilerPlateWriter.println(";");
-			definedVariables.get(target).writeAccessor(writer);
-		}
-	}
-
-	protected void writeListAccessor(int operand, ExpressionWriter indexWriter, PrintWriter writer) {
-		if(definedVariables.containsKey(operand)) {
-			VariableDefn var = definedVariables.get(operand);
-			if(var instanceof ListDefn) {
-				((ListDefn)var).writeAccessor(indexWriter, writer);
-			}
-			else {
-				throw new RuntimeException("Indexing into non-list type: "+operand);
-			}
-		}
-		else {
-			throw new RuntimeException("Use of undefined list: "+operand);
+			getVariable(target, type).writeAccessor(writer);
 		}
 	}
 	
-	public void writeListLength(int operand, PrintWriter writer) {
-		if(definedVariables.containsKey(operand)) {
-			VariableDefn var = definedVariables.get(operand);
-			if(var instanceof ListDefn) {
-				((ListDefn)var).writeLengthAccessor(writer);
-			}
-			else {
-				throw new RuntimeException("Lengthof non-list type: "+operand);
-			}
+	protected void writeRHS(int operand, Type type, PrintWriter writer) {
+		VariableDefn defn = getVariable(operand, type);
+		if(defn != null) {
+			defn.writeAccessor(writer);
 		}
 		else {
-			throw new RuntimeException("Use of undefined list: "+operand);
-		}
-	}
-	
-	protected void writeTupleAccessor(int operand, ExpressionWriter indexWriter, PrintWriter writer) {
-		if(definedVariables.containsKey(operand)) {
-			VariableDefn var = definedVariables.get(operand);
-			if(var instanceof TupleDefn) {
-				((TupleDefn)var).writeAccessor(indexWriter, writer);
-			}
-			else {
-				throw new RuntimeException("Indexing into non-list type: "+operand);
-			}
-		}
-		else {
-			throw new RuntimeException("Use of undefined list: "+operand);
+			throw new RuntimeException("Use of undefined variable: "+operand+type);
 		}
 	}
 
-	protected void writeRHS(int operand, PrintWriter writer) {
-		if(definedVariables.containsKey(operand)) {
-			definedVariables.get(operand).writeAccessor(writer);
+	protected void writeListAccessor(int operand, Type listType, ExpressionWriter indexWriter, PrintWriter writer) {
+		VariableDefn defn = getVariable(operand, listType);
+		if(defn != null) {
+			if(defn instanceof ListDefn) {
+				((ListDefn)defn).writeAccessor(indexWriter, writer);
+			}
+			else {
+				throw new RuntimeException("Indexing into non-list type: "+operand+listType);
+			}
 		}
 		else {
-			throw new RuntimeException("Use of undefined variable: "+operand);
+			throw new RuntimeException("Use of undefined list: "+operand+listType);
+		}
+	}
+	
+	public void writeListLength(int operand, Type listType, PrintWriter writer) {
+		VariableDefn defn = getVariable(operand, listType);
+		if(defn != null) {
+			if(defn instanceof ListDefn) {
+				((ListDefn)defn).writeLengthAccessor(writer);
+			}
+			else {
+				throw new RuntimeException("Lengthof non-list type: "+operand+listType);
+			}
+		}
+		else {
+			throw new RuntimeException("Use of undefined list: "+operand+listType);
+		}
+	}
+	
+	protected void writeTupleAccessor(int operand, Type tupleType, ExpressionWriter indexWriter, PrintWriter writer) {
+		VariableDefn defn = getVariable(operand, tupleType);
+		if(defn != null) {
+			if(defn instanceof TupleDefn) {
+				((TupleDefn)defn).writeAccessor(indexWriter, writer);
+			}
+			else {
+				throw new RuntimeException("Indexing into non-list type: "+operand+tupleType);
+			}
+		}
+		else {
+			throw new RuntimeException("Use of undefined list: "+operand+tupleType);
 		}
 	}
 
@@ -292,5 +286,32 @@ public class OpenCLTypeWriter {
 
 	public String boilerPlate() {
 		return boilerPlateStringWriter.toString();
+	}
+	
+	private void defineVariable(int register, Type type, VariableDefn defn) {
+		if(type instanceof Type.Union) {
+			throw new InternalError("Union types not supported by TypeWriter");
+		}
+		
+		HashMap<Type, VariableDefn> types = definedVariables.get(register);
+		if(types == null) {
+			types = new HashMap<Type, VariableDefn>();
+			definedVariables.put(register, types);
+		}
+		types.put(type, defn);
+	}
+	
+	private VariableDefn getVariable(int register, Type type) {
+		HashMap<Type, VariableDefn> types = definedVariables.get(register);
+		if(types == null) {
+			return null;
+		}
+		else {
+			return types.get(type);
+		}
+	}
+	
+	private static String variableName(int register, Type type) {
+		return VAR_PREFIX + register + "_" + SymbolUtilities.typeMangle(type);
 	}
 }
