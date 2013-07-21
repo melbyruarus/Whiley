@@ -21,6 +21,7 @@ import wyocl.ar.CFGNode;
 import wyocl.ar.DFGGenerator;
 import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator;
+import wyocl.ar.utils.DFGIterator;
 import wyocl.ar.utils.NotADAGException;
 
 public class LoopFilterLoopProcessor {
@@ -83,9 +84,9 @@ public class LoopFilterLoopProcessor {
 
 		// TODO: actually output marshaling and unmarshaling code here? Avoids cost of function call, wrapping/unwrapping multiple times and type tests
 
-		final int temporaryListRegister = 230200; // FIXME: don't hard code target
-		final int temporaryCounterRegister = 230201; // FIXME: don't hard code
-		final int temporaryModuleNameRegister = 230202; // FIXME: don't hard code
+		final int temporaryListRegister = DFGIterator.maxUsedRegister(loopNode) + 1;
+		final int temporaryCounterRegister = temporaryListRegister + 1;
+		final int temporaryModuleNameRegister = temporaryCounterRegister + 1;
 
 		replacementEntries.add(new Block.Entry(Code.NewList(Type.List(Type.T_ANY, false), temporaryListRegister, argumentRegisters)));
 		replacementEntries.add(new Block.Entry(Code.Const(temporaryModuleNameRegister, Constant.V_STRING(modulePath))));

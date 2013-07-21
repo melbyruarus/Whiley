@@ -169,4 +169,27 @@ public class CFGIterator {
 			}
 		}
 	}
+
+	public static Set<CFGNode> getRoots(CFGNode node) {
+		Set<CFGNode> previous = new HashSet<CFGNode>(node.previous);
+		while(true) {
+			Set<CFGNode> fringe = new HashSet<CFGNode>();
+			boolean more = false;
+			for(CFGNode n : previous) {
+				if(n.previous.isEmpty()) {
+					fringe.add(n);
+				}
+				else {
+					more = true;
+					fringe.addAll(n.previous);
+				}
+			}
+			if(!more) {
+				return fringe;
+			}
+			else {
+				previous = fringe;
+			}
+		}
+	}
 }

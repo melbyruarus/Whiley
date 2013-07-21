@@ -15,6 +15,7 @@ import wyocl.ar.CFGNode.ForAllLoopNode;
 import wyocl.ar.DFGGenerator;
 import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator;
+import wyocl.ar.utils.DFGIterator;
 import wyocl.filter.LoopFilterCFGCompatabilityAnalyser.AnalyserResult;
 import wyocl.filter.LoopType;
 
@@ -77,8 +78,7 @@ public class ForallToForOptimisationStage {
 		//------------------------
 		Type.Leaf indexType = (Type.Leaf)loop.getBytecode().getIndexType();
 
-		// FIXME: implement free register tracking
-		int lowerRegister = (int) (Math.random()*10000 + 10000);
+		int lowerRegister = DFGIterator.maxUsedRegister(loop) + 1;
 		int upperRegister = lowerRegister+1;
 
 		for(Bytecode.Binary bytecode : listCreationBytecodes) {

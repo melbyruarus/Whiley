@@ -3,7 +3,9 @@ package wyocl.ar.utils;
 import java.util.HashSet;
 import java.util.Set;
 
+import wyocl.ar.CFGNode;
 import wyocl.ar.DFGNode;
+import wyocl.ar.utils.CFGIterator.CFGNodeCallback;
 
 public class DFGIterator {
 	public interface DFGNodeCallback {
@@ -62,5 +64,31 @@ public class DFGIterator {
 		}, one);
 		
 		return doesDepend[0];
+	}
+
+	public static int maxUsedRegister(CFGNode node) {
+		Set<CFGNode> roots = CFGIterator.getRoots(node);
+		if(roots.size() != 1) {
+			throw new InternalError("CFGNode "+node+" has more than one root");
+		}
+		
+		final Set<DFGNode> dfgNodes = new HashSet<DFGNode>();
+		
+		CFGIterator.iterateCFGFlow(new CFGNodeCallback() {
+			@Override
+			public boolean process(CFGNode node) {
+				node.gatherDFGNodesInto(dfgNodes);
+				return true;
+			}
+		}, roots.iterator().next(), null);
+		
+		int max = 0;
+		for(DFGNode n : dfgNodes) {
+			if(n.register > max) {
+				max = n.register;
+			}
+		}
+		
+		return max;
 	}
 }
