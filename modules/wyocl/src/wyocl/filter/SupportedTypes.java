@@ -1,7 +1,6 @@
 package wyocl.filter;
 
 import wyil.lang.Type;
-import wyil.lang.Type.EffectiveCollection;
 import wyil.lang.Type.EffectiveList;
 import wyil.lang.Type.EffectiveTuple;
 
@@ -11,16 +10,19 @@ public class SupportedTypes {
 		if(type instanceof Type.Leaf) {
 			return true;
 		}
-		else if(type instanceof EffectiveCollection && includes(((EffectiveCollection) type).element())) {
-			if(type instanceof EffectiveList) {
-				return true;
+		if(type instanceof EffectiveList && includes(((EffectiveList) type).element())) {
+			return true;
+		}
+		else if(type instanceof EffectiveTuple) {
+			Type first = ((EffectiveTuple) type).element(0);
+			boolean allSame = true;
+			for(Type t : ((EffectiveTuple) type).elements()) {
+				if(!t.equals(first)) {
+					allSame = false;
+					break;
+				}
 			}
-			else if(type instanceof EffectiveTuple) {
-				return true;
-			}
-			else {
-				return false;
-			}
+			return allSame;
 		}
 		else {
 			return false;

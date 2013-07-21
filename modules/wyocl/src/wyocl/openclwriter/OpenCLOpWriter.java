@@ -154,11 +154,9 @@ public class OpenCLOpWriter {
 	}
 
 	private void writeKernelGlobalIndex(int dimension, PrintWriter writer) {
-		writer.print("(get_global_id(");
+		writer.print("get_global_id(");
 		writer.print(dimension);
-		writer.print(") + get_global_offset(");
-		writer.print(dimension);
-		writer.print("))");
+		writer.print(')');
 	}
 
 	private class Task {
@@ -691,7 +689,19 @@ public class OpenCLOpWriter {
 			writeIndents();
 			typeWriter.writeLHS(b.getTarget(), b.getConstant().type(), writer);
 			writer.print(" = ");
-			writer.print(b.getConstant()); // FIXME: should be looking at types
+			if(b.getConstant().type().equals(Type.T_INT)) {
+				writer.print(b.getConstant());
+			}
+			else if(b.getConstant().type().equals(Type.T_REAL)) {
+				writer.print(b.getConstant());
+				writer.print('f');
+			}
+			else if(b.getConstant().type().equals(Type.T_BOOL)) {
+				writer.print(b.getConstant());
+			}
+			else {
+				throw new InternalError("Unknown constant type: " + b.getConstant().type());
+			}
 			writeLineEnd(b);
 		}
 

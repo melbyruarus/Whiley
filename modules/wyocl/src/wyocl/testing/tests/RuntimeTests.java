@@ -11,6 +11,7 @@ public class RuntimeTests extends TestHarness {
 
 	@Test public void SwitchIfWhileForAll() { runTest("SwitchIfWhileForAll"); }
 	@Test public void FunctionCall() { runTest("FunctionCall"); }
+	@Test public void Tuple() { runTest("Tuple"); }
 	@Test public void While() { runTest("While"); }
 	@Test public void Forall() { runTest("Forall"); }
 	@Test public void Switch() { runTest("Switch"); }
@@ -18,7 +19,9 @@ public class RuntimeTests extends TestHarness {
 	@Test public void Arithmatic() { runTest("Arithmatic"); }
 	@Test public void Remainder() { runTest("Remainder"); }
 	@Test public void Logic() { runTest("Logic"); }
-	@Test public void Mandelbrot() { runTest("mandelbrot_with_hash"); }
+	@Test public void MandelbrotInt() { runTest("mandelbrot_int"); }
+	@Test public void MandelbrotFloat() { runTest("mandelbrot_float"); }
 	@Test public void ForallOptimisationNotPossible() { runTest("ForallOptimisationNotPossible"); }
 	@Test public void ForallOptimisationPossible() { runTest("ForallOptimisationPossible"); }
+	@Test public void TypesChanging() { runTest("TypesChanging"); }
 }

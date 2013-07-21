@@ -1,20 +1,27 @@
 import * from whiley.lang.*
 
-public int fakeFloat(int num, int den):
-	return (10000 * num) / den
+public void ::printHash([int] data, real start, System.Console sys):
+	if Time.current() - start < 0.5:
+		hash = 0
+		count = 0
+		while count < |data|:
+			hash = hash + data[count]
+			count = count + 1
 
-public int multFakeFloat(int a, int b):
-	return (a * b) / 10000
+		sys.out.println(hash)
+	else:
+		sys.out.println("Too slow")
 
 public void ::main(System.Console sys):
 	size = 100
-	side = 0..size
 	data = 0..(size * size)
 
-	for x in side:
+	start = Time.current()
+
+	for x in 0..size:
 		x1 = multFakeFloat((((-x*fakeFloat(2, 1))/size)+fakeFloat(1, 1)), fakeFloat(15, 10))+fakeFloat(5, 10)
 
-		for y in side:
+		for y in 0..size:
 			y1 = multFakeFloat((((y*fakeFloat(2, 1))/size)-fakeFloat(1, 1)), fakeFloat(15, 10))
 			
 			x0 = 0
@@ -29,10 +36,10 @@ public void ::main(System.Console sys):
 			
 			data[y*size+x] = iteration
 
-	hash = 0
-	count = 0
-	while count < |data|:
-		hash = hash + data[count]
-		count = count + 1
+	printHash(data, start, sys)
 
-	sys.out.println(hash)
+public int fakeFloat(int num, int den):
+	return (10000 * num) / den
+
+public int multFakeFloat(int a, int b):
+	return (a * b) / 10000
