@@ -944,13 +944,20 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		@Override
 		protected void propogateRegisterInfo(DFGReadWriteTracking info) {
 			startRegisterInfo = DFGGenerator.mergeRegisterInfo(startRegisterInfo, info);
-			endRegisterInfo = DFGGenerator.propogateDFGThroughBytecode(bytecode, startRegisterInfo);
+			if(bytecode == null) {
+				endRegisterInfo = startRegisterInfo;
+			}
+			else {
+				endRegisterInfo = DFGGenerator.propogateDFGThroughBytecode(bytecode, startRegisterInfo);
+			}
 		}
 
 		@Override
 		public void gatherDFGNodesInto(Set<DFGNode> allDFGNodes) {
-			allDFGNodes.addAll(bytecode.readDFGNodes.values());
-			allDFGNodes.addAll(bytecode.writtenDFGNodes.values());
+			if(bytecode != null) {
+				allDFGNodes.addAll(bytecode.readDFGNodes.values());
+				allDFGNodes.addAll(bytecode.writtenDFGNodes.values());
+			}
 		}
 
 		@Override
@@ -958,7 +965,9 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			startRegisterInfo = null;
 			endRegisterInfo = null;
 			
-			DFGGenerator.clearDFG(bytecode);
+			if(bytecode != null) {
+				DFGGenerator.clearDFG(bytecode);
+			}
 		}
 
 		@Override
@@ -978,7 +987,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
 			checkIfNeedingLabel(bytecodeVisitor, this);
 			
-			if(bytecode.isVoid()) {
+			if(bytecode == null || bytecode.isVoid()) {
 				bytecodeVisitor.visit(new Bytecode.Return(Code.Return()));
 			}
 			else {

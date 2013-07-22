@@ -1014,7 +1014,10 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 
 		@Override
 		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
-			readRegisters.add(code.operand);
+		}
+		
+		public String getTarget() {
+			return code.target;
 		}
 	}
 	

@@ -18,7 +18,8 @@
 
 package wyjc.testing.tests;
 
-import org.junit.*;
+import org.junit.Ignore;
+import org.junit.Test;
 
 import wyjc.testing.TestHarness;
 
