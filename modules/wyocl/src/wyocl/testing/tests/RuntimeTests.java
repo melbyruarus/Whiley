@@ -24,4 +24,5 @@ public class RuntimeTests extends TestHarness {
 	@Test public void ForallOptimisationNotPossible() { runTest("ForallOptimisationNotPossible"); }
 	@Test public void ForallOptimisationPossible() { runTest("ForallOptimisationPossible"); }
 	@Test public void TypesChanging() { runTest("TypesChanging"); }
+	@Test public void MultipleKernels() { runTest("MultipleKernels"); }
 }

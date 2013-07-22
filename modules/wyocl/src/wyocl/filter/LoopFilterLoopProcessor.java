@@ -60,7 +60,7 @@ public class LoopFilterLoopProcessor {
 		List<Argument> kernelArguments = new ArrayList<Argument>();
 		determineKernelArguments(loopNode, kernelArguments);
 		Collections.sort(kernelArguments);
-
+		
 		if(loopNode instanceof CFGNode.ForAllLoopNode) {
 			Bytecode.ForAll loopBytecode = ((CFGNode.ForAllLoopNode)loopNode).getBytecode();
 

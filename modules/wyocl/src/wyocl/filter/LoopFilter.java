@@ -78,7 +78,7 @@ public class LoopFilter {
 		Set<CFGNode.ReturnNode> exitPoints = new HashSet<CFGNode.ReturnNode>();
 		Set<UnresolvedTargetNode> unresolvedTargets = new HashSet<CFGNode.UnresolvedTargetNode>();
 		CFGNode rootNode = CFGGenerator.processEntries(entries, exitPoints, unresolvedTargets, methodArgumentsDFGNodes);
-
+		
 		try {
 			List<CFGIterator.Entry> sortedCFG = CFGIterator.createNestedRepresentation(rootNode);
 			final LoopAnalyserResult analyserResult = CFGCompatabilityAnalyser.analyse(rootNode, sortedCFG, functionCompatabilities);
