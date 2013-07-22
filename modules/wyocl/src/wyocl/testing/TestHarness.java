@@ -38,9 +38,10 @@ import wyc.WycMain;
 import wyocl.util.WyoclBuildTask;
 
 public class TestHarness {
-	private static final String WYONE_PATH="../../../modules/wyone/src/";
+	private static final String WYRL_PATH="../../../modules/wyrl/src/";
 	private static final String WYJC_PATH="../../../modules/wyjc/src/";
 	private static final String WYIL_PATH="../../../modules/wyil/src/";
+	private static final String WYBS_PATH="../../../modules/wybs/src/";
 	private static String WYRT_PATH;
 
 	static {
@@ -156,9 +157,9 @@ public class TestHarness {
 	private static String run(String path, String name) {
 		try {
 			// We need to have
-			String classpath = "." + File.pathSeparator + WYIL_PATH
-					+ File.pathSeparator + WYJC_PATH + File.pathSeparator + WYONE_PATH +
-					File.pathSeparator + "/Users/melby/Programming/Eclipse/libraries/JOCL-0.1.8-bin/JOCL-0.1.8.jar:";
+			String classpath = "." + File.pathSeparator + WYBS_PATH + File.pathSeparator + WYIL_PATH
+					+ File.pathSeparator + WYJC_PATH + File.pathSeparator + WYRL_PATH + File.pathSeparator
+					+ "/Users/melby/Programming/Eclipse/libraries/JOCL-0.1.8-bin/JOCL-0.1.8.jar:";
 			classpath = classpath.replace('/', File.separatorChar);
 			String tmp = "java -cp " + classpath + " " + name;
 			Process p = Runtime.getRuntime().exec(tmp, null, new File(path));

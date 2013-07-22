@@ -182,21 +182,21 @@ public class Wyil2OpenClBuilder implements Builder {
 		}
 	}
 
-	protected static int kid = 0;
 	private void writeOpenCLKernel(OpenCLKernelInvocationDescription kernelDescription, PrintWriter kernelpWriter) {
 		OpenCLOpWriter kernelOpWriter = new OpenCLOpWriter(functionInvokeTranslator);
 
-		kernelOpWriter.writeFunctionDecleration("__kernel", Type.T_VOID, "whiley_gpgpu_func_"+kid, kernelDescription.kernelArguments, kernelpWriter);
+		kernelOpWriter.writeFunctionDecleration("__kernel", Type.T_VOID, "whiley_gpgpu_func_"+kernelDescription.id, kernelDescription.kernelArguments, kernelpWriter);
 
 		kernelpWriter.print(" {\n");
 		kernelOpWriter.writeLoopBodyAsKernel(kernelDescription.loopNode, kernelDescription.loopBody, kernelpWriter);
-		kernelpWriter.println("}");
+		kernelpWriter.println("}\n");
 	}
 	
 	private void writeOpenCLFunction(OpenCLFunctionDescription function, PrintWriter forwardDecPWriter, PrintWriter functionPWriter) {
 		OpenCLOpWriter functionOpWriter = new OpenCLOpWriter(functionInvokeTranslator);
+		OpenCLOpWriter functionDeclWriter = new OpenCLOpWriter(functionInvokeTranslator);
 
-		functionOpWriter.writeFunctionDecleration(null, (Type.Leaf)function.getReturnType(), function.getName(), function.getParams(), forwardDecPWriter);
+		functionDeclWriter.writeFunctionDecleration(null, (Type.Leaf)function.getReturnType(), function.getName(), function.getParams(), forwardDecPWriter);
 		forwardDecPWriter.println(';');
 		
 		functionOpWriter.writeFunctionDecleration(null, (Type.Leaf)function.getReturnType(), function.getName(), function.getParams(), functionPWriter);

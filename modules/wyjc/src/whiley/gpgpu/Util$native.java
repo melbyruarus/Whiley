@@ -80,11 +80,15 @@ public class Util$native {
 		}
 	}
 	
-	public static WyList executeWYGPUKernelOverRange(String moduleName, WyList arguments, BigInteger start, BigInteger end) {
-		return executeWYGPUKernelOverRange(moduleName, arguments, start.intValue(), end.intValue());
+	public static WyList executeWYGPUKernelOverRange(String moduleName, BigInteger kernelID, WyList arguments, BigInteger start, BigInteger end) {
+		return executeWYGPUKernelOverRange(moduleName, kernelID.intValue(), arguments, start.intValue(), end.intValue());
 	}
 
-	public static WyList executeWYGPUKernelOverRange(String moduleName, WyList arguments, int start, int end) {
+	public static WyList executeWYGPUKernelOverRange(String moduleName, int kernelID, WyList arguments, int start, int end) {
+		if(start == end) {
+			return arguments;
+		}
+		
 		try {
 			DeviceList devices = DeviceList.devicesOfType(DeviceType.GPU, 1);
 			if (devices.count() < 1) {
@@ -99,7 +103,17 @@ public class Util$native {
 			Program p = new Program(c);
 			p.loadSource(new String[] { Utils.fileAsString(moduleName+".cl") });
 			p.compileForDevices(devices);
-			Kernel k = new Kernel(p, "whiley_gpgpu_func_0");
+			Kernel k;
+			try {
+				k = new Kernel(p, "whiley_gpgpu_func_"+kernelID);
+			} catch (KernelInitilizationException e) {
+				if(e.status == CL.CL_INVALID_KERNEL_NAME) {
+					throw new IllegalArgumentException("There does not exist a kernel named whiley_gpgpu_func_"+kernelID+" in module "+moduleName, e);
+				}
+				else {
+					throw e;
+				}
+			}
 
 			// ------------------------ Begin computation
 			// -------------------------
@@ -180,24 +194,24 @@ public class Util$native {
 			throw new RuntimeException(e);
 		} catch (ProgramCompilationException e) {
 			throw new RuntimeException(e);
-		} catch (KernelInitilizationException e) {
-			throw new RuntimeException(e);
 		} catch (KernelExecutionException e) {
 			throw new RuntimeException(e);
 		} catch (MemoryException e) {
 			throw new RuntimeException(e);
 		} catch (KernelArgumentException e) {
 			throw new RuntimeException(e);
+		} catch (KernelInitilizationException e) {
+			throw new RuntimeException(e);
 		}
 	}
 	
 	@SuppressWarnings("unchecked")
-	public static WyList executeWYGPUKernelOverArray(String moduleName, WyList arguments, WyList sourceList) {
+	public static WyList executeWYGPUKernelOverArray(String moduleName, BigInteger kernelID, WyList arguments, WyList sourceList) {
 		WyList tempList = new WyList();
 		tempList.add(sourceList);
 		tempList.addAll(arguments);
-		
-		WyList result = executeWYGPUKernelOverRange(moduleName, tempList, 0, sourceList.size());
+				
+		WyList result = executeWYGPUKernelOverRange(moduleName, kernelID.intValue(), tempList, 0, sourceList.size());
 		
 		result.remove(0);
 		
@@ -284,6 +298,10 @@ public class Util$native {
 					for (int n = 0; n < size; n++) {
 						whileyObject.add(WyRat.valueOf(buffer.getFloat()));
 					}
+				} else if (type == Boolean.class) {
+					for (int n = 0; n < size; n++) {
+						whileyObject.add(Boolean.valueOf(buffer.get() == 1));
+					}
 				} else {
 					throw new RuntimeException("Non unmarshabale type encountered: " + type);
 				}
@@ -318,6 +336,10 @@ public class Util$native {
 				} else if (type == WyRat.class) {
 					for (int n = 0; n < size; n++) {
 						whileyObject.add(WyRat.valueOf(buffer.getFloat()));
+					}
+				} else if (type == Boolean.class) {
+					for (int n = 0; n < size; n++) {
+						whileyObject.add(Boolean.valueOf(buffer.get() == 1));
 					}
 				} else {
 					throw new RuntimeException("Non unmarshabale type encountered: " + type);
@@ -439,6 +461,8 @@ public class Util$native {
 			writeObjectToBytes((WyRat) o, buffer);
 		} else if (o instanceof BigInteger) {
 			writeObjectToBytes((BigInteger) o, buffer);
+		} else if (o instanceof Boolean) {
+			writeObjectToBytes((Boolean) o, buffer);
 		} else {
 			throw new RuntimeException("Non marshabale type encountered: " + o);
 		}
@@ -471,6 +495,11 @@ public class Util$native {
 		buffer.putInt(integer.intValue()); // FIXME: this assumes lots about the
 											// format of cl_int
 	}
+	
+	private static void writeObjectToBytes(Boolean bool, ByteBuffer buffer) {
+		buffer.put((byte) (((boolean)bool)?1:0)); // FIXME: this assumes lots about the
+													// format of cl_uint8
+	}
 
 	private static int sizeofObject(WyList list) {
 		Object element0 = list.get(0);
@@ -496,9 +525,11 @@ public class Util$native {
 
 	private static int sizeofType(@SuppressWarnings("rawtypes") Class type) {
 		if (type == WyRat.class) {
-			return Sizeof.cl_mem;
+			return Sizeof.cl_float;
 		} else if (type == BigInteger.class) {
-			return Sizeof.cl_mem;
+			return Sizeof.cl_int;
+		} else if (type == Boolean.class) {
+			return Sizeof.cl_uint8;
 		} else {
 			throw new RuntimeException("Non marshabale type encountered: " + type);
 		}

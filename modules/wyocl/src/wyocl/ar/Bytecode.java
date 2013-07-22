@@ -311,7 +311,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 			return code.operand;
 		}
 
-		public Type.EffectiveCollection getType() {
+		public Type.EffectiveCollection getDataStructureType() {
 			return code.type;
 		}
 	}
@@ -939,9 +939,6 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		@Override
 		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 			writtenRegisters.add(new Pair<Integer, Type>(code.target, (code.type.ret())));
-			for(int op : code.operands) {
-				readRegisters.add(op);
-			}
 		}
 	}
 	

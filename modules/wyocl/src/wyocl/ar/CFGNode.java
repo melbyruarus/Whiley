@@ -17,6 +17,7 @@ import wyocl.ar.Bytecode.Return;
 import wyocl.ar.DFGGenerator.DFGReadWriteTracking;
 import wyocl.ar.utils.CFGIterator;
 import wyocl.ar.utils.CFGIterator.CFGNodeCallback;
+import wyocl.ar.utils.NotADAGException;
 import wyocl.ar.utils.TopologicalSorter;
 import wyocl.ar.utils.TopologicalSorter.DAGSortNode;
 
@@ -162,7 +163,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		bytecodeVisitor.visit(new Bytecode.UnconditionalJump(Code.Goto(label)));
 	}
 	
-	public DFGReadWriteTracking getStartTypes() {
+	public DFGReadWriteTracking getStartRegisterInfo() {
 		return startRegisterInfo;
 	}
 
@@ -378,16 +379,21 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		@Override
 		public void forBytecode(final BytecodeVisitor bytecodeVisitor) {
 			checkIfNeedingLabel(bytecodeVisitor, this);
+			
 			bytecodeVisitor.visit(bytecode);
-			CFGIterator.iterateCFGScope(new CFGNodeCallback() {
-				@Override
-				public boolean process(CFGNode node) {
-					if(bytecodeVisitor.shouldVisitNode(node)) {
-						node.forBytecode(bytecodeVisitor);
+			try {
+				CFGIterator.iterateSortedCFGScope(new CFGNodeCallback() {
+					@Override
+					public boolean process(CFGNode node) {
+						if(bytecodeVisitor.shouldVisitNode(node)) {
+							node.forBytecode(bytecodeVisitor);
+						}
+						return true;
 					}
-					return true;
-				}
-			}, body, null);
+				}, body, null);
+			} catch (NotADAGException e) {
+				throw new InternalError("Loop body should be dag");
+			}
 		}
 	}
 
@@ -568,15 +574,19 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			checkIfNeedingLabel(bytecodeVisitor, this);
 			
 			bytecodeVisitor.visit(bytecode);
-			CFGIterator.iterateCFGScope(new CFGNodeCallback() {
-				@Override
-				public boolean process(CFGNode node) {
-					if(bytecodeVisitor.shouldVisitNode(node)) {
-						node.forBytecode(bytecodeVisitor);
+			try {
+				CFGIterator.iterateSortedCFGScope(new CFGNodeCallback() {
+					@Override
+					public boolean process(CFGNode node) {
+						if(bytecodeVisitor.shouldVisitNode(node)) {
+							node.forBytecode(bytecodeVisitor);
+						}
+						return true;
 					}
-					return true;
-				}
-			}, body, null);
+				}, body, null);
+			} catch (NotADAGException e) {
+				throw new InternalError("Loop body should be dag");
+			}
 		}
 	}
 
@@ -791,6 +801,9 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 				if(pair.second() == oldNode) {
 					branches.set(n, new Pair<Constant, CFGNode>(pair.first(), newNode));
 				}
+			}
+			if(defaultBranch == oldNode) {
+				defaultBranch = newNode;
 			}
 		}
 

@@ -115,10 +115,10 @@ public class CFGGenerator {
 						}
 						else if(bytecode instanceof Bytecode.Label) {
 							if(node.body.instructions.size() == 0) {
-								// Do nothing
+								return recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, i+1, exitPoints, unresolvedTargets);
 							}
 							else {
-								CFGNode next = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, i, exitPoints, unresolvedTargets);
+								CFGNode next = recursivlyConstructRoughCFG(entries, labelIndexes, alreadyProcessedEntries, loopEndIndex, i+1, exitPoints, unresolvedTargets);
 								node.next = next;
 								next.previous.add(node);
 								return node;
@@ -197,6 +197,8 @@ public class CFGGenerator {
 								nextNode = jumpNode;
 							}
 
+							alreadyProcessedEntries.put(i, nextNode);
+							
 							if(node.body.instructions.size() == 0) {
 								return nextNode;
 							}
@@ -208,6 +210,10 @@ public class CFGGenerator {
 						}
 						else if(bytecode instanceof Bytecode.Loop) {
 							Bytecode.Loop loopBytecode = (Bytecode.Loop)bytecode;
+							if(alreadyProcessedEntries.get(i) != null) {
+								throw new RuntimeException("Bug!!!");
+							}
+							
 							CFGNode.LoopNode loopNode;
 							Integer index = labelIndexes.get(loopBytecode.loopEndLabel());
 							int end = 0;
@@ -227,6 +233,7 @@ public class CFGGenerator {
 
 							if(DEBUG) {System.err.println("Creating node "+loopNode);}
 
+							alreadyProcessedEntries.put(i, loopNode);
 							alreadyProcessedEntries.put(end, loopNode.endNode);
 							loopEndIndex.put(loopBytecode.loopEndLabel(), loopNode);
 
@@ -238,6 +245,7 @@ public class CFGGenerator {
 								unresolvedTargets.add((CFGNode.UnresolvedTargetNode)loopNode.body);
 							}
 							loopNode.body.previous.add(loopNode);
+							
 							Integer target = labelIndexes.get(loopNode.loopEndLabel());
 							if(target != null) {
 								target++;

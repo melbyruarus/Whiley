@@ -169,7 +169,7 @@ public class OpenCLTypeWriter {
 			return "void";
 		}
 		else if(type instanceof Type.Bool) {
-			return "bool";
+			return "unsigned char";
 		}
 		else {
 			throw new RuntimeException("Unknown primitive type encountered: "+type);
@@ -231,7 +231,7 @@ public class OpenCLTypeWriter {
 			defn.writeAccessor(writer);
 		}
 		else {
-			throw new RuntimeException("Use of undefined variable: "+operand+type);
+			throw new RuntimeException("Use of undefined variable: "+operand+ " of type: " + type);
 		}
 	}
 
@@ -242,11 +242,11 @@ public class OpenCLTypeWriter {
 				((ListDefn)defn).writeAccessor(indexWriter, writer);
 			}
 			else {
-				throw new RuntimeException("Indexing into non-list type: "+operand+listType);
+				throw new RuntimeException("Indexing into non-list type: "+operand+ " of type: " + listType);
 			}
 		}
 		else {
-			throw new RuntimeException("Use of undefined list: "+operand+listType);
+			throw new RuntimeException("Use of undefined list: "+operand+ " of type: " + listType);
 		}
 	}
 	
@@ -257,11 +257,11 @@ public class OpenCLTypeWriter {
 				((ListDefn)defn).writeLengthAccessor(writer);
 			}
 			else {
-				throw new RuntimeException("Lengthof non-list type: "+operand+listType);
+				throw new RuntimeException("Lengthof non-list type: "+operand+ " of type: " + listType);
 			}
 		}
 		else {
-			throw new RuntimeException("Use of undefined list: "+operand+listType);
+			throw new RuntimeException("Use of undefined list: "+operand+ " of type: " + listType);
 		}
 	}
 	
@@ -272,11 +272,11 @@ public class OpenCLTypeWriter {
 				((TupleDefn)defn).writeAccessor(indexWriter, writer);
 			}
 			else {
-				throw new RuntimeException("Indexing into non-list type: "+operand+tupleType);
+				throw new RuntimeException("Indexing into non-list type: "+operand+ " of type: " + tupleType);
 			}
 		}
 		else {
-			throw new RuntimeException("Use of undefined list: "+operand+tupleType);
+			throw new RuntimeException("Use of undefined list: "+operand+ " of type: " + tupleType);
 		}
 	}
 

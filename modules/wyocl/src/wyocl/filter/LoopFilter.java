@@ -35,6 +35,7 @@ public class LoopFilter {
 	 * being filtered.
 	 */
 	private final String modulePath;
+	private int kernelID = 0;
 	private final FunctionResolver functionResolver;
 		
 	private Map<Integer, DFGNode> methodArgumentsDFGNodes;
@@ -101,7 +102,7 @@ public class LoopFilter {
 				public boolean process(CFGNode node) {
 					if(node instanceof CFGNode.LoopNode) {
 						if(analyserResult.loopCompatabilities.get(node) == LoopType.GPU_IMPLICIT) {
-							finalkernels.put((LoopNode) node, LoopFilterLoopProcessor.process((LoopNode) node, modulePath));
+							finalkernels.put((LoopNode) node, LoopFilterLoopProcessor.process((LoopNode) node, modulePath, kernelID++));
 						}
 					}
 					return true;
@@ -109,7 +110,7 @@ public class LoopFilter {
 			}, rootNode, null);
 						
 			final List<Entry> blockEntries = new ArrayList<Entry>();
-			
+						
 			CFGIterator.iterateCFGScope(new CFGNodeCallback() {
 				@Override
 				public boolean process(CFGNode node) {

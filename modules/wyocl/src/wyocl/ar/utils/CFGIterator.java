@@ -192,4 +192,24 @@ public class CFGIterator {
 			}
 		}
 	}
+
+	public static void iterateSortedCFGScope(CFGNodeCallback callback, CFGNode start, Set<CFGNode> terminate) throws NotADAGException {
+		// TODO Auto-generated method stub
+		final Set<CFGNode> nodesSet = new HashSet<CFGNode>();
+		
+		iterateCFGScope(new CFGNodeCallback() {
+			
+			@Override
+			public boolean process(CFGNode node) {
+				nodesSet.add(node);
+				return true;
+			}
+		}, start, terminate);
+		
+		List<CFGNode> nodesList = TopologicalSorter.sort(nodesSet);
+		
+		for(CFGNode n : nodesList) {
+			callback.process(n);
+		}
+	}
 }

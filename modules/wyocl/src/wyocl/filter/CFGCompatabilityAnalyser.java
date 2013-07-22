@@ -174,11 +174,15 @@ public class CFGCompatabilityAnalyser {
 
 				Map<CFGNode, LoopType> types = new HashMap<CFGNode, LoopType>();
 				Set<String> calledFunctions = new HashSet<String>();
+				boolean anyOk = false;
 				for(LoopDescription l : allLoops.values()) {
+					if(l.type == LoopType.GPU_IMPLICIT) {
+						anyOk = true;
+					}
 					types.put(l.loopNode, l.type);
 					calledFunctions.addAll(l.functionCalls);
 				}
-				return new LoopAnalyserResult(true, types, calledFunctions);
+				return new LoopAnalyserResult(anyOk, types, calledFunctions);
 			}
 			else {
 				return new LoopAnalyserResult(false, null, null);

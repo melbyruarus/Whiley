@@ -10,7 +10,7 @@ public class SupportedTypes {
 		if(type instanceof Type.Leaf) {
 			return true;
 		}
-		if(type instanceof EffectiveList && includes(((EffectiveList) type).element())) {
+		if(type instanceof EffectiveList && ((EffectiveList) type).element() instanceof Type.Leaf) {
 			return true;
 		}
 		else if(type instanceof EffectiveTuple) {

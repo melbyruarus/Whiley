@@ -25,5 +25,5 @@
 
 package whiley.gpgpu
 
-public native [any] executeWYGPUKernelOverArray(string moduleName, [any] arguments, [any] sourceList):
-public native [any] executeWYGPUKernelOverRange(string moduleName, [any] arguments, int start, int end):
+public native [any] executeWYGPUKernelOverArray(string moduleName, int kernelID, [any] arguments, [any] sourceList):
+public native [any] executeWYGPUKernelOverRange(string moduleName, int kernelID, [any] arguments, int start, int end):

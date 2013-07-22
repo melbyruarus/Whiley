@@ -474,7 +474,7 @@ public class OpenCLOpWriter {
 
 					@Override
 					public void visitLengthOf(LengthOf b) {
-						writeLengthOn(b);
+						writeLengthOf(b);
 					}
 
 					@Override
@@ -723,11 +723,11 @@ public class OpenCLOpWriter {
 			writeLineEnd(b);
 		}
 
-		protected void writeLengthOn(LengthOf b) {
+		protected void writeLengthOf(LengthOf b) {
 			writeIndents();
-			typeWriter.writeLHS(b.getTarget(), b.getType().element(), writer);
+			typeWriter.writeLHS(b.getTarget(), Type.T_INT, writer);
 			writer.print(" = ");
-			typeWriter.writeListLength(b.getOperand(), (Type)b.getType(), writer);
+			typeWriter.writeListLength(b.getOperand(), (Type)b.getDataStructureType(), writer);
 			writeLineEnd(b);
 		}
 
@@ -738,7 +738,7 @@ public class OpenCLOpWriter {
 			typeWriter.writeListAccessor(b.getLeftOperand(), (Type)b.getType(), new ExpressionWriter() {
 				@Override
 				public void writeExpression(PrintWriter writer) {
-					typeWriter.writeRHS(b.getRightOperand(), b.getAssignedType(), writer);
+					typeWriter.writeRHS(b.getRightOperand(), b.getType().key(), writer);
 				}
 			}, writer);
 			writeLineEnd(b);

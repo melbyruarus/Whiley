@@ -30,6 +30,7 @@ public class LoopFilterLoopProcessor {
 
 		{
 			this.add(Type.T_STRING);
+			this.add(Type.T_INT);
 			this.add(Type.List(Type.T_ANY, false));
 			this.add(Type.List(Type.T_ANY, false));
 		}
@@ -42,6 +43,7 @@ public class LoopFilterLoopProcessor {
 
 		{
 			this.add(Type.T_STRING);
+			this.add(Type.T_INT);
 			this.add(Type.List(Type.T_ANY, false));
 			this.add(Type.T_INT);
 			this.add(Type.T_INT);
@@ -49,9 +51,8 @@ public class LoopFilterLoopProcessor {
 	};
 	private static Type.FunctionOrMethod executeWYGPUKernelOverRangeFunctionType = Type.FunctionOrMethod.Function(Type.List(Type.T_ANY, false), Type.T_VOID, executeWYGPUKernelOverRangeArgumentTypes);
 	private static NameID executeWYGPUKernelOverRangeFunctionPath = new NameID(Trie.fromString("whiley/gpgpu/Util"), "executeWYGPUKernelOverRange");
-
 	
-	static OpenCLKernelInvocationDescription process(CFGNode.LoopNode loopNode, String modulePath) {
+	static OpenCLKernelInvocationDescription process(CFGNode.LoopNode loopNode, String modulePath, int kernelID) {
 		List<Block.Entry> replacementEntries = new ArrayList<Block.Entry>();
 
 		// FIXME: Check source isn't modified?
@@ -90,8 +91,10 @@ public class LoopFilterLoopProcessor {
 
 		replacementEntries.add(new Block.Entry(Code.NewList(Type.List(Type.T_ANY, false), temporaryListRegister, argumentRegisters)));
 		replacementEntries.add(new Block.Entry(Code.Const(temporaryModuleNameRegister, Constant.V_STRING(modulePath))));
+		replacementEntries.add(new Block.Entry(Code.Const(temporaryCounterRegister, Constant.V_INTEGER(BigInteger.valueOf(kernelID)))));
 		ArrayList<Integer> argumentsToFunction = new ArrayList<Integer>();
 		argumentsToFunction.add(temporaryModuleNameRegister);
+		argumentsToFunction.add(temporaryCounterRegister);
 		argumentsToFunction.add(temporaryListRegister);
 
 		if(loopNode instanceof CFGNode.ForAllLoopNode) {
@@ -127,7 +130,7 @@ public class LoopFilterLoopProcessor {
 		}
 		
 		try {
-			return new OpenCLKernelInvocationDescription(loopNode, CFGIterator.createNestedRepresentation(loopNode.body), kernelArguments, replacementEntries);
+			return new OpenCLKernelInvocationDescription(loopNode, CFGIterator.createNestedRepresentation(loopNode.body), kernelArguments, replacementEntries, kernelID);
 		} catch (NotADAGException e) {
 			throw new InternalError("Shouldn't be getting NotADAGException here, should already have been tested");
 		}
