@@ -9,11 +9,11 @@ import wyocl.ar.CFGNode.DummyNode;
 import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator;
 import wyocl.ar.utils.CFGIterator.CFGNodeCallback;
-import wyocl.filter.LoopFilterCFGCompatabilityAnalyser.AnalyserResult;
+import wyocl.filter.CFGCompatabilityAnalyser.LoopAnalyserResult;
 
 public class DeadCodeEliminationStage {
 
-	public static void process(DummyNode dummyNode, AnalyserResult analyserResult, Map<Integer, DFGNode> argumentRegisters) {
+	public static void process(DummyNode dummyNode, LoopAnalyserResult analyserResult, Map<Integer, DFGNode> argumentRegisters) {
 		// TODO: eliminate iteratively & nodes
 		
 		CFGIterator.iterateCFGFlow(new CFGNodeCallback() {

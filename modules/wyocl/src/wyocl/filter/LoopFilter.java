@@ -7,11 +7,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import wybs.lang.NameID;
 import wybs.lang.Path.ID;
 import wyil.lang.Block;
 import wyil.lang.Block.Entry;
 import wyil.lang.Code;
 import wyil.lang.Type;
+import wyil.lang.Type.FunctionOrMethod;
 import wyil.lang.WyilFile;
 import wyocl.ar.Bytecode;
 import wyocl.ar.CFGGenerator;
@@ -23,8 +25,9 @@ import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator;
 import wyocl.ar.utils.CFGIterator.CFGNodeCallback;
 import wyocl.ar.utils.NotADAGException;
-import wyocl.filter.LoopFilterCFGCompatabilityAnalyser.AnalyserResult;
+import wyocl.filter.CFGCompatabilityAnalyser.LoopAnalyserResult;
 import wyocl.filter.optimizer.CFGOptimizer;
+import wyocl.util.SymbolUtilities;
 
 public class LoopFilter {
 	/**
@@ -32,15 +35,24 @@ public class LoopFilter {
 	 * being filtered.
 	 */
 	private final String modulePath;
+	private final FunctionResolver functionResolver;
 		
 	private Map<Integer, DFGNode> methodArgumentsDFGNodes;
+	private Map<String, OpenCLFunctionDescription> functionDescriptions = new HashMap<String, OpenCLFunctionDescription>();
+	private Set<String> functionsBeingProcessed = new HashSet<String>();
+	private Map<String, Set<String>> functionsCalledByFunctions = new HashMap<String, Set<String>>();
+	private Map<String, Boolean> functionCompatabilities = new HashMap<String, Boolean>();
 
-	public LoopFilter(ID id) {
+	public static interface FunctionResolver {
+		public Block blockForFunctionWithName(NameID name, FunctionOrMethod type);
+	}
+	
+	public LoopFilter(ID id, FunctionResolver functionResolver) {
+		this.functionResolver = functionResolver;
 		modulePath = id.toString();
 	}
 
-
-	public Block processBlock(Block blk, Map<CFGNode.LoopNode, OpenCLKernelInvocationDescription> kernels, Set<OpenCLFunctionDescription> functions) {
+	public Block processBlock(Block blk, Map<CFGNode.LoopNode, OpenCLKernelInvocationDescription> kernels, Set<String> calledFunctions) {
 		if(methodArgumentsDFGNodes == null) {
 			throw new InternalError("beginMethod() must be called before processBlock()");
 		}
@@ -50,9 +62,16 @@ public class LoopFilter {
 		}
 		final Map<CFGNode.LoopNode, OpenCLKernelInvocationDescription> finalkernels = kernels;
 
-		List<Block.Entry> entries = new ArrayList<Block.Entry>(); // TODO: method of actually getting this?
+		List<Block.Entry> entries = new ArrayList<Block.Entry>();
 		for(Block.Entry be : blk) {
 			entries.add(be);
+			if(be.code instanceof Code.Invoke) {
+				NameID name = ((Code.Invoke)be.code).name;
+				Type.FunctionOrMethod type = ((Code.Invoke)be.code).type;
+				if(!functionCompatabilities.containsKey(name)) {
+					processFunction(name, functionResolver.blockForFunctionWithName(name, type), type);
+				}
+			}
 		}
 
 		Set<CFGNode.ReturnNode> exitPoints = new HashSet<CFGNode.ReturnNode>();
@@ -61,9 +80,19 @@ public class LoopFilter {
 
 		try {
 			List<CFGIterator.Entry> sortedCFG = CFGIterator.createNestedRepresentation(rootNode);
-			final AnalyserResult analyserResult = LoopFilterCFGCompatabilityAnalyser.analyse(rootNode, sortedCFG);
+			final LoopAnalyserResult analyserResult = CFGCompatabilityAnalyser.analyse(rootNode, sortedCFG, functionCompatabilities);
 			if(!analyserResult.anyLoopsCompatable) {
 				return null;
+			}
+			if(calledFunctions != null) {
+				calledFunctions.addAll(analyserResult.loopCalledFunctions);
+				Set<String> fringe = new HashSet<String>(calledFunctions);
+				while(!fringe.isEmpty()) {
+					String next = fringe.iterator().next();
+					fringe.addAll(functionsCalledByFunctions.get(next));
+					calledFunctions.addAll(functionsCalledByFunctions.get(next));
+					fringe.remove(next);
+				}
 			}
 			rootNode = CFGOptimizer.process(rootNode, analyserResult, methodArgumentsDFGNodes);
 			
@@ -78,9 +107,7 @@ public class LoopFilter {
 					return true;
 				}
 			}, rootNode, null);
-			
-			// FIXME: implement functions
-			
+						
 			final List<Entry> blockEntries = new ArrayList<Entry>();
 			
 			CFGIterator.iterateCFGScope(new CFGNodeCallback() {
@@ -150,9 +177,82 @@ public class LoopFilter {
 		}
 	}
 
+	private OpenCLFunctionDescription processFunction(NameID name, Block blk, Type.FunctionOrMethod type) {
+		if(blk == null) {
+			return null;
+		}
+		
+		String mangledName = SymbolUtilities.nameMangle(name.name(), type);
+		
+		if(functionsBeingProcessed.contains(mangledName)) {
+			return null;
+		}
+		functionsBeingProcessed.add(mangledName);
+		
+		Set<String> called = functionsCalledByFunctions.get(mangledName);
+		if(called == null) {
+			called = new HashSet<String>();
+			functionsCalledByFunctions.put(mangledName, called);
+		}
+		
+		for(Block.Entry be : blk) {
+			if(be.code instanceof Code.Invoke) {
+				NameID calledName = ((Code.Invoke)be.code).name;
+				Type.FunctionOrMethod calledType = ((Code.Invoke)be.code).type;
+				String mangledCalledName = SymbolUtilities.nameMangle(calledName.name(), calledType);
+				
+				called.add(mangledCalledName);
+				
+				if(!functionCompatabilities.containsKey(mangledCalledName)) {
+					OpenCLFunctionDescription description = processFunction(calledName, functionResolver.blockForFunctionWithName(calledName, calledType), calledType);
+					if(description == null) {
+						functionsBeingProcessed.remove(mangledName);
+						functionCompatabilities.put(mangledName, false);
+						return null;
+					}
+				}
+			}
+		}
+		
+		List<Block.Entry> entries = new ArrayList<Block.Entry>();
+		for(Block.Entry be : blk) {
+			entries.add(be);
+		}
+		
+		OpenCLFunctionDescription returnValue = null;
+		
+		Map<Integer, DFGNode> arguments = new HashMap<Integer, DFGNode>();
+		List<Argument> params = new ArrayList<Argument>();
+		int count = 0;
+		for(Type t : type.params()) {
+			arguments.put(count, new DFGNode(null, count, t, true));
+			params.add(new Argument(t, count));
+			count++;
+		}
+		
+		CFGNode rootNode = CFGGenerator.processEntries(entries, null, null, arguments);
+		if(CFGCompatabilityAnalyser.analyseFunction(rootNode, arguments, type)) {
+			try {
+				returnValue = new OpenCLFunctionDescription(mangledName, params, CFGIterator.createNestedRepresentation(rootNode), type.ret());
+				
+				functionCompatabilities.put(mangledName, true);
+				functionDescriptions.put(mangledName, returnValue);
+			} catch (NotADAGException e) {
+				throw new InternalError("Functions cannot be non-DAGs");
+			}
+		}
+		else {
+			functionCompatabilities.put(mangledName, false);
+		}
+		
+		functionsBeingProcessed.remove(mangledName);
+		
+		return returnValue;
+	}
+
 	public void beginMethod(WyilFile.MethodDeclaration method) {
 		methodArgumentsDFGNodes = new HashMap<Integer, DFGNode>();
-
+		
 		int register = 0;
 		for(Type t : method.type().params()) {
 			DFGNode node = new DFGNode(null, register, t, true);
@@ -163,5 +263,9 @@ public class LoopFilter {
 
 	public void endMethod() {
 		methodArgumentsDFGNodes = null;
+	}
+	
+	public Map<String, OpenCLFunctionDescription> getFunctionDescriptions() {
+		return functionDescriptions;
 	}
 }

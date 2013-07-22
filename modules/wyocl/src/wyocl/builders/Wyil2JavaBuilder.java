@@ -1,8 +1,12 @@
 package wyocl.builders;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
+import wybs.lang.Path;
+import wybs.util.Pair;
 import wyil.lang.Block;
 import wyil.lang.WyilFile;
 import wyjvm.attributes.Code.Handler;
@@ -10,6 +14,7 @@ import wyjvm.attributes.LineNumberTable;
 import wyjvm.lang.Bytecode;
 import wyjvm.lang.ClassFile;
 import wyocl.filter.LoopFilter;
+import wyocl.util.GlobalResolver;
 
 /**
  * A builder for compiling Wyil files into a combination of Java and OpenCL.
@@ -26,10 +31,18 @@ public class Wyil2JavaBuilder extends wyjc.Wyil2JavaBuilder {
 	 * appropriate OpenCL kernel
 	 */
 	private LoopFilter loopFilter;
+	private GlobalResolver functionResolver;
+
+	@Override
+	public void build(List<Pair<Path.Entry<?>,Path.Entry<?>>> delta) throws IOException {
+		functionResolver = new GlobalResolver(delta);
+		super.build(delta);
+	}
 	
 	@Override
 	protected ClassFile build(WyilFile module) {
-		loopFilter = new LoopFilter(module.id());
+		loopFilter = new LoopFilter(module.id(), functionResolver);
+		
 		ClassFile result = super.build(module);
 		loopFilter = null;
 		return result;

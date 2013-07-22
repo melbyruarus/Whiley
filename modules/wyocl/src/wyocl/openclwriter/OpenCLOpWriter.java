@@ -1028,12 +1028,12 @@ public class OpenCLOpWriter {
 		}
 	}
 
-	public void writeFunctionDecleration(String attributes, Type.Leaf type, String name, List<Argument> arguments, PrintWriter writer) {
+	public void writeFunctionDecleration(String attributes, Type.Leaf returnType, String name, List<Argument> arguments, PrintWriter writer) {
 		if(attributes != null) {
 			writer.print(attributes);
 			writer.print(' ');
 		}
-		typeWriter.writeReturnType(type, writer);
+		typeWriter.writeReturnType(returnType, writer);
 		writer.print(' ');
 		writer.print(name);
 		writer.print('(');

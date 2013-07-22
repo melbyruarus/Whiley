@@ -28,11 +28,11 @@ package wyocl.builders;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import wybs.lang.Builder;
 import wybs.lang.Logger;
@@ -43,22 +43,31 @@ import wyil.lang.Block;
 import wyil.lang.Type;
 import wyil.lang.WyilFile;
 import wyocl.ar.Bytecode;
-import wyocl.ar.CFGGenerator;
 import wyocl.ar.CFGNode;
-import wyocl.ar.DFGNode;
-import wyocl.ar.utils.CFGIterator;
-import wyocl.ar.utils.NotADAGException;
-import wyocl.filter.Argument;
 import wyocl.filter.LoopFilter;
+import wyocl.filter.OpenCLFunctionDescription;
 import wyocl.filter.OpenCLKernelInvocationDescription;
 import wyocl.lang.ClFile;
-import wyocl.openclwriter.NotSupportedByGPGPUException;
 import wyocl.openclwriter.OpenCLOpWriter;
+import wyocl.openclwriter.OpenCLOpWriter.FunctionInvokeTranslator;
+import wyocl.util.GlobalResolver;
 import wyocl.util.SymbolUtilities;
 
 public class Wyil2OpenClBuilder implements Builder {
+	private static final FunctionInvokeTranslator functionInvokeTranslator = new FunctionInvokeTranslator() {
+		@Override
+		public String translateFunctionName(Bytecode b) {
+			if(b instanceof Bytecode.Invoke) {
+				return SymbolUtilities.nameMangle(((Bytecode.Invoke) b).getName().name(), ((Bytecode.Invoke) b).getType());
+			}
+			else {
+				throw new InternalError("Unexpected function call bytecode: " + b);
+			}
+		}
+	};
+	
 	private Logger logger = Logger.NULL;
-	private HashMap<Path.ID, WyilFile> wyilFiles = new HashMap<Path.ID, WyilFile>();
+	private GlobalResolver functionResolver;
 
 	/**
 	 * This Filter is used to find bodies of loops which have been determined to
@@ -91,13 +100,7 @@ public class Wyil2OpenClBuilder implements Builder {
 		// write files
 		// ========================================================================
 
-		for(Pair<Path.Entry<?>,Path.Entry<?>> p : delta) {
-			Path.Entry<?> cl = p.second();
-			if(cl.contentType() == ClFile.ContentType) {
-				Path.Entry<WyilFile> wy = (Path.Entry<WyilFile>) p.first();
-				wyilFiles.put(wy.id(), wy.read());
-			}
-		}
+		functionResolver = new GlobalResolver(delta);
 
 		for(Pair<Path.Entry<?>,Path.Entry<?>> p : delta) {
 			Path.Entry<?> cl = p.second();
@@ -124,19 +127,27 @@ public class Wyil2OpenClBuilder implements Builder {
 	protected ClFile build(WyilFile module) {
 		// The forward deceleration writer
 		StringWriter forwardDecWriter = new StringWriter();
-		PrintWriter forwardDecpWriter = new PrintWriter(forwardDecWriter);
-		HashSet<String> declaredMethods = new HashSet<String>();
-
-		// The invoked function writer
-		HashSet<String> invokedFunctions = new HashSet<String>();
+		PrintWriter forwardDecPWriter = new PrintWriter(forwardDecWriter);
+		
+		// The function writer
+		StringWriter functionWriter = new StringWriter();
+		PrintWriter functionPWriter = new PrintWriter(functionWriter);
 
 		// The kernel writer
 		StringWriter kernelWriter = new StringWriter();
 		PrintWriter kernelpWriter = new PrintWriter(kernelWriter);
 
-		loopFilter = new LoopFilter(module.id());
+		loopFilter = new LoopFilter(module.id(), functionResolver);
+		Set<String> calledFunctions = new HashSet<String>();
 		for(WyilFile.MethodDeclaration method : module.methods()) {
-			build(method, declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
+			build(method, calledFunctions, kernelpWriter);
+		}
+		for(String s : calledFunctions) {
+			OpenCLFunctionDescription function = loopFilter.getFunctionDescriptions().get(s);
+			if(function == null) {
+				throw new InternalError("Couldn't find function description for: "+s);
+			}
+			writeOpenCLFunction(function, forwardDecPWriter, functionPWriter);
 		}
 		loopFilter = null;
 
@@ -145,128 +156,53 @@ public class Wyil2OpenClBuilder implements Builder {
 		pWriter.println("// Automatically generated from " + module.filename());
 		OpenCLOpWriter.writeRuntime(pWriter);
 		pWriter.println(forwardDecWriter.toString());
-		for(String s : invokedFunctions) {
-			pWriter.println(s);
-		}
+		pWriter.print(functionWriter.toString());
 		pWriter.println(kernelWriter.toString());
 
 		return new ClFile(writer.toString());
 	}
 
-	protected void build(WyilFile.MethodDeclaration method, HashSet<String> declaredMethods, PrintWriter forwardDecpWriter, HashSet<String> invokedFunctions, PrintWriter kernelpWriter) {
+	protected void build(WyilFile.MethodDeclaration method, Set<String> calledFunctions, PrintWriter kernelpWriter) {
 		loopFilter.beginMethod(method);
 		for(WyilFile.Case c : method.cases()) {
-			write(c, method, declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
+			write(c, method, calledFunctions, kernelpWriter);
 		}
 		loopFilter.endMethod();
 	}
 
-	protected void write(WyilFile.Case c, WyilFile.MethodDeclaration method, HashSet<String> declaredMethods, PrintWriter forwardDecpWriter, HashSet<String> invokedFunctions, PrintWriter kernelpWriter) {
-		write(c.body(), c, method, declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
+	protected void write(WyilFile.Case c, WyilFile.MethodDeclaration method, Set<String> calledFunctions, PrintWriter kernelpWriter) {
+		write(c.body(), c, method, calledFunctions, kernelpWriter);
 	}
 
-	protected void write(Block b, WyilFile.Case c, WyilFile.MethodDeclaration method, HashSet<String> declaredMethods, PrintWriter forwardDecpWriter, HashSet<String> invokedFunctions, PrintWriter kernelpWriter) {
+	protected void write(Block b, WyilFile.Case c, WyilFile.MethodDeclaration method, Set<String> calledFunctions, PrintWriter kernelpWriter) {
 		Map<CFGNode.LoopNode, OpenCLKernelInvocationDescription> kernels = new HashMap<CFGNode.LoopNode, OpenCLKernelInvocationDescription>();
-		loopFilter.processBlock(b, kernels, null);
+		loopFilter.processBlock(b, kernels, calledFunctions);
 		for(OpenCLKernelInvocationDescription o : kernels.values()) {
-			writeOpenCLKernel(o, declaredMethods, forwardDecpWriter, invokedFunctions, kernelpWriter);
+			writeOpenCLKernel(o, kernelpWriter);
 		}
 	}
 
 	protected static int kid = 0;
-	private void writeOpenCLKernel(OpenCLKernelInvocationDescription kernelDescription, final HashSet<String> declaredMethods, final PrintWriter forwardDecpWriter, final HashSet<String> invokedFunctions, PrintWriter kernelpWriter) {
-		final OpenCLOpWriter invokedFunctionDeclerationOpWriter[] = new OpenCLOpWriter[1];
-		final HashSet<String> writingMethods = new HashSet<String>();
-
-		final OpenCLOpWriter.FunctionInvokeTranslator functionTranslator[] = new OpenCLOpWriter.FunctionInvokeTranslator[1];
-		functionTranslator[0] = new OpenCLOpWriter.FunctionInvokeTranslator() {
-			@Override
-			public String translateFunctionName(Bytecode code) {
-				if(code instanceof Bytecode.Invoke) {
-					Bytecode.Invoke invoke = (Bytecode.Invoke)code;
-
-					String name = SymbolUtilities.nameMangle(invoke.getName().name(), invoke.getType());
-
-					if(!declaredMethods.contains(name)) {
-						if(writingMethods.contains(name)) {
-							throw new NotSupportedByGPGPUException("Recursion not supported");
-						}
-						writingMethods.add(name);
-
-						ArrayList<Argument> functionArguments = new ArrayList<Argument>();
-						Map<Integer, DFGNode> functionArgumentDFGNodes = new HashMap<Integer, DFGNode>();
-						int reg = 0; // FIXME: nicer way?
-						for(Type t : invoke.getType().params()) {
-							functionArguments.add(new Argument(t, reg));
-							functionArgumentDFGNodes.put(reg, new DFGNode(null, reg, t, true));
-							reg++;
-						}
-
-						// FIXME: no checks for return type type
-						invokedFunctionDeclerationOpWriter[0].writeFunctionDecleration(null, (Type.Leaf)invoke.getType().ret(), name, functionArguments, forwardDecpWriter);
-						forwardDecpWriter.println(';');
-
-						StringWriter invokedFunctionWriter = new StringWriter();
-						PrintWriter invokedFunctionpWriter = new PrintWriter(invokedFunctionWriter);
-						OpenCLOpWriter invokedFunctionOpWriter = new OpenCLOpWriter(functionTranslator[0]);
-
-						invokedFunctionOpWriter.writeFunctionDecleration(null, (Type.Leaf)invoke.getType().ret(), name, functionArguments, invokedFunctionpWriter);
-						invokedFunctionpWriter.print(" {\n");
-
-						WyilFile module = wyilFiles.get(invoke.getName().module());
-						if(module == null) {
-							throw new RuntimeException("Unable to find module: "+invoke.getName().module());
-						}
-						Block block = null;
-						for(WyilFile.MethodDeclaration m : module.method(invoke.getName().name())) {
-							if(name.equals(SymbolUtilities.nameMangle(m.name(), m.type()))) {
-								// FIXME: what are the multiple cases?
-								block = m.cases().get(0).body();
-								break;
-							}
-						}
-
-						if(block == null) {
-							throw new RuntimeException("Unable to find method: "+invoke.getName().name());
-						}
-
-						ArrayList<Block.Entry> entries = new ArrayList<Block.Entry>();
-						for(Block.Entry e : block) {
-							entries.add(e);
-						}
-
-						CFGNode rootNode = CFGGenerator.processEntries(entries, null, null, functionArgumentDFGNodes);
-						List<CFGIterator.Entry> functionBody;
-						try {
-							functionBody = CFGIterator.createNestedRepresentation(rootNode);
-						} catch (NotADAGException e1) {
-							// FIXME: extend loop filter to also look at called functions
-							throw new RuntimeException("Called unsupported function!");
-						}
-						invokedFunctionOpWriter.writeFunctionBody(functionBody, invokedFunctionpWriter);
-						invokedFunctionpWriter.println("}");
-
-						invokedFunctions.add(invokedFunctionWriter.toString());
-
-						declaredMethods.add(name);
-						writingMethods.remove(name);
-					}
-
-					return name;
-				}
-				else {
-					throw new NotSupportedByGPGPUException();
-				}
-			}
-		};
-
-		invokedFunctionDeclerationOpWriter[0] = new OpenCLOpWriter(functionTranslator[0]);
-		OpenCLOpWriter kernelOpWriter = new OpenCLOpWriter(functionTranslator[0]);
+	private void writeOpenCLKernel(OpenCLKernelInvocationDescription kernelDescription, PrintWriter kernelpWriter) {
+		OpenCLOpWriter kernelOpWriter = new OpenCLOpWriter(functionInvokeTranslator);
 
 		kernelOpWriter.writeFunctionDecleration("__kernel", Type.T_VOID, "whiley_gpgpu_func_"+kid, kernelDescription.kernelArguments, kernelpWriter);
 
 		kernelpWriter.print(" {\n");
 		kernelOpWriter.writeLoopBodyAsKernel(kernelDescription.loopNode, kernelDescription.loopBody, kernelpWriter);
 		kernelpWriter.println("}");
+	}
+	
+	private void writeOpenCLFunction(OpenCLFunctionDescription function, PrintWriter forwardDecPWriter, PrintWriter functionPWriter) {
+		OpenCLOpWriter functionOpWriter = new OpenCLOpWriter(functionInvokeTranslator);
+
+		functionOpWriter.writeFunctionDecleration(null, (Type.Leaf)function.getReturnType(), function.getName(), function.getParams(), forwardDecPWriter);
+		forwardDecPWriter.println(';');
+		
+		functionOpWriter.writeFunctionDecleration(null, (Type.Leaf)function.getReturnType(), function.getName(), function.getParams(), functionPWriter);
+
+		functionPWriter.print(" {\n");
+		functionOpWriter.writeFunctionBody(function.getEntries(), functionPWriter);
+		functionPWriter.println("}\n");
 	}
 }

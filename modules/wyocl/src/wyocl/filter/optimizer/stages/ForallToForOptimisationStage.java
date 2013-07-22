@@ -16,11 +16,11 @@ import wyocl.ar.DFGGenerator;
 import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator;
 import wyocl.ar.utils.DFGIterator;
-import wyocl.filter.LoopFilterCFGCompatabilityAnalyser.AnalyserResult;
+import wyocl.filter.CFGCompatabilityAnalyser.LoopAnalyserResult;
 import wyocl.filter.LoopType;
 
 public class ForallToForOptimisationStage {
-	public static void process(final CFGNode.DummyNode rootNode, final AnalyserResult analyserResult, final Map<Integer, DFGNode> argumentRegisters) {
+	public static void process(final CFGNode.DummyNode rootNode, final LoopAnalyserResult analyserResult, final Map<Integer, DFGNode> argumentRegisters) {
 		final boolean[] earlyFinish = new boolean[1];
 		earlyFinish[0] = true;
 		while(earlyFinish[0]) {
@@ -72,7 +72,7 @@ public class ForallToForOptimisationStage {
 		}
 	}
 	
-	private static void replaceForAllWithFor(ForAllLoopNode loop, Set<Bytecode.Binary> listCreationBytecodes, final AnalyserResult analyserResult) {
+	private static void replaceForAllWithFor(ForAllLoopNode loop, Set<Bytecode.Binary> listCreationBytecodes, final LoopAnalyserResult analyserResult) {
 		//------------------------
 		// Perform actual swap
 		//------------------------

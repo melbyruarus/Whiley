@@ -4,13 +4,13 @@ import java.util.Map;
 
 import wyocl.ar.CFGNode;
 import wyocl.ar.DFGNode;
-import wyocl.filter.LoopFilterCFGCompatabilityAnalyser.AnalyserResult;
+import wyocl.filter.CFGCompatabilityAnalyser.LoopAnalyserResult;
 import wyocl.filter.optimizer.stages.DeadCodeEliminationStage;
 import wyocl.filter.optimizer.stages.ForallToForOptimisationStage;
 
 public class CFGOptimizer {
 
-	public static CFGNode process(CFGNode rootNode, AnalyserResult analyserResult, final Map<Integer, DFGNode> argumentRegisters) {
+	public static CFGNode process(CFGNode rootNode, LoopAnalyserResult analyserResult, final Map<Integer, DFGNode> argumentRegisters) {
 		CFGNode.DummyNode dummyNode = new CFGNode.DummyNode(rootNode);
 		rootNode.previous.add(dummyNode);
 		

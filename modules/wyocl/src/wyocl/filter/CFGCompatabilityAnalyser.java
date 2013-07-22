@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 
+import wybs.lang.NameID;
+import wyil.lang.Type;
 import wyocl.ar.Bytecode;
 import wyocl.ar.CFGNode;
 import wyocl.ar.CFGNode.LoopNode;
@@ -15,22 +17,29 @@ import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator;
 import wyocl.ar.utils.CFGIterator.CFGNodeCallback;
 import wyocl.ar.utils.CFGIterator.Entry;
+import wyocl.util.SymbolUtilities;
 
-public class LoopFilterCFGCompatabilityAnalyser {
+public class CFGCompatabilityAnalyser {
 	private final static boolean DEBUG = false;
 
-	public static class AnalyserResult {
+	public static class LoopAnalyserResult {
 		public final boolean anyLoopsCompatable;
 		public final Map<CFGNode, LoopType> loopCompatabilities;
+		public final Set<String> loopCalledFunctions;
 		
-		public AnalyserResult(boolean anyLoopsCompatable, Map<CFGNode, LoopType> loopCompatabilities) {
+		public LoopAnalyserResult(boolean anyLoopsCompatable, Map<CFGNode, LoopType> loopCompatabilities, Set<String> loopCalledFunctions) {
 			this.anyLoopsCompatable = anyLoopsCompatable;
 			this.loopCompatabilities = loopCompatabilities;
+			this.loopCalledFunctions = loopCalledFunctions;
 		}
 	}
 
-	public static AnalyserResult analyse(CFGNode rootNode, List<Entry> sortedCFG) {
-		return new Task().preprocessLoops(rootNode, sortedCFG);
+	public static LoopAnalyserResult analyse(CFGNode rootNode, List<Entry> sortedCFG, Map<String, Boolean> compatableFunctions) {
+		return new LoopAnalysisTask().process(rootNode, sortedCFG, compatableFunctions);
+	}
+	
+	public static boolean analyseFunction(CFGNode rootNode, Map<Integer, DFGNode> arguments, Type returnType) {
+		return new FunctionAnalysisTask().process(rootNode, arguments, returnType);
 	}
 	
 	private static class LoopDescription {
@@ -41,24 +50,107 @@ public class LoopFilterCFGCompatabilityAnalyser {
 		public boolean dataDependanciesCompatable = false;
 		public boolean earlyReturnCompatable = false;
 		public boolean typesCompatable = false;
+		public boolean functionCallsCompatable;
+		public HashSet<String> functionCalls;
 
 		public LoopDescription(LoopNode loopNode) {
 			this.loopNode = loopNode;
 		}
 		
 		public boolean getLoopCombatability() {
-			return bytecodesCompatable && breaksCompatable && dataDependanciesCompatable && earlyReturnCompatable && typesCompatable;
+			return bytecodesCompatable && breaksCompatable && dataDependanciesCompatable && earlyReturnCompatable && typesCompatable && functionCallsCompatable;
+		}
+	}
+	
+	private static abstract class AbstractAnalysisTask {
+		protected boolean determineRegisterTypeCompatability(CFGNode rootNode) {
+			boolean typesCompatable = true;
+
+			final Set<DFGNode> nodes = new HashSet<DFGNode>();
+			Set<CFGNode> endNodes = new HashSet<CFGNode>();
+			rootNode.getScopeNextNodes(endNodes);
+			CFGIterator.iterateCFGFlow(new CFGIterator.CFGNodeCallback() {
+				@Override
+				public boolean process(CFGNode node) {
+					node.gatherDFGNodesInto(nodes);
+					return true;
+				}
+			}, rootNode, endNodes);
+
+			for(DFGNode n : nodes) {
+				if(!SupportedTypes.includes(n.type)) {
+					if(DEBUG) { System.err.println("Code not compatable because non-supported type contained: "+n.type); }
+					typesCompatable = false;
+					break;
+				}
+			}
+			
+			return typesCompatable;
+		}
+		
+		protected boolean determineBytecodeCompatability(CFGNode rootNode) {
+			final boolean[] bytecodesCompatable = new boolean[1];
+			bytecodesCompatable[0] = true;
+			
+			Set<CFGNode> endNodes = new HashSet<CFGNode>();
+			rootNode.getScopeNextNodes(endNodes);
+
+			CFGIterator.iterateCFGFlow(new CFGNodeCallback() {
+				@Override
+				public boolean process(CFGNode node) {
+					if(node instanceof VanillaCFGNode) {
+						VanillaCFGNode vanilaNode = (VanillaCFGNode)node;
+						for(Bytecode b : vanilaNode.body.instructions) {
+							if(!(b instanceof Bytecode.GPUSupportedBytecode)) {
+								bytecodesCompatable[0] = false;
+								if(DEBUG) { System.err.println("Code not compatable because non-supported bytecode contained: "+b); }
+								return false;
+							}
+						}
+					}
+					else if(!(node instanceof CFGNode.GPUSupportedNode)) {
+						bytecodesCompatable[0] = false;
+						if(DEBUG) { System.err.println("Code not compatable because non-supported node contained: "+node); }
+						return false;
+					}
+					else {
+						CFGNode.GPUSupportedNode gpuNode = (CFGNode.GPUSupportedNode)node;
+						if(!gpuNode.isGPUSupported()) {
+							bytecodesCompatable[0] = false;
+							if(DEBUG) { System.err.println("Code not compatable because non-supported node contained: "+node); }
+							return false;
+						}
+					}
+
+					return true;
+				}
+			}, rootNode, endNodes);
+			
+			return bytecodesCompatable[0];
+		}
+	}
+	
+	private static class FunctionAnalysisTask extends AbstractAnalysisTask {
+		public boolean process(CFGNode rootNode, Map<Integer, DFGNode> arguments, Type returnType) {
+			return determineBytecodeCompatability(rootNode) && determineRegisterTypeCompatability(rootNode) && determinePassByValueComplience(rootNode, arguments, returnType);
+		}
+		
+		private boolean determinePassByValueComplience(CFGNode rootNode, Map<Integer, DFGNode> arguments, Type returnType) {
+			// FIXME: implement
+			return true;
 		}
 	}
 
-	private static class Task {
+	private static class LoopAnalysisTask extends AbstractAnalysisTask {
 		private Map<CFGNode, LoopDescription> allLoops = new HashMap<CFGNode, LoopDescription>();
 		private List<Entry> sortedCFG;
+		private Map<String, Boolean> compatableFunctions;
 		
-		private AnalyserResult preprocessLoops(CFGNode rootNode, List<Entry> sortedCFG) {
+		private LoopAnalyserResult process(CFGNode rootNode, List<Entry> sortedCFG, Map<String, Boolean> compatableFunctions) {
 			if(DEBUG) { System.err.println("Preprocess loops"); }
 			
 			this.sortedCFG = sortedCFG;
+			this.compatableFunctions = compatableFunctions;
 
 			CFGIterator.iterateCFGFlow(new CFGNodeCallback() {
 				@Override
@@ -81,42 +173,57 @@ public class LoopFilterCFGCompatabilityAnalyser {
 				determineLoopTypes();
 
 				Map<CFGNode, LoopType> types = new HashMap<CFGNode, LoopType>();
+				Set<String> calledFunctions = new HashSet<String>();
 				for(LoopDescription l : allLoops.values()) {
 					types.put(l.loopNode, l.type);
+					calledFunctions.addAll(l.functionCalls);
 				}
-				return new AnalyserResult(true, types);
+				return new LoopAnalyserResult(true, types, calledFunctions);
 			}
 			else {
-				return new AnalyserResult(false, null);
+				return new LoopAnalyserResult(false, null, null);
 			}
 		}
 
 		private void determineLoopsFunctionCallCompatability() {
-			// FIXME: implement
-		}
-
-		private void determineLoopsRegisterTypeCompatability() {
 			for(final LoopDescription loop : allLoops.values()) {
-				loop.typesCompatable = true;
+				loop.functionCallsCompatable = true;
+				loop.functionCalls = new HashSet<String>();
 
-				final Set<DFGNode> nodes = new HashSet<DFGNode>();
 				Set<CFGNode> endNodes = new HashSet<CFGNode>();
 				loop.loopNode.getScopeNextNodes(endNodes);
 				CFGIterator.iterateCFGFlow(new CFGIterator.CFGNodeCallback() {
 					@Override
 					public boolean process(CFGNode node) {
-						node.gatherDFGNodesInto(nodes);
+						if(node instanceof CFGNode.VanillaCFGNode) {
+							for(Bytecode b : ((CFGNode.VanillaCFGNode) node).body.instructions) {
+								if(b instanceof Bytecode.Invoke) {
+									NameID name = ((Bytecode.Invoke) b).getName();
+									Type.FunctionOrMethod type = ((Bytecode.Invoke) b).getType();
+									String mangledName = SymbolUtilities.nameMangle(name.name(), type);
+									loop.functionCalls.add(mangledName);
+									
+									Boolean ok = compatableFunctions.get(mangledName);
+									if(ok == null) {
+										if(DEBUG) { System.err.println("Loop " + loop + " not compatable because unresolved function called: "+name); }
+										loop.functionCallsCompatable = false;
+									}
+									else if(ok == false) {
+										if(DEBUG) { System.err.println("Loop " + loop + " not compatable because unsupported function called: "+name); }
+										loop.functionCallsCompatable = false;
+									}
+								}
+							}
+						}
 						return true;
 					}
 				}, loop.loopNode, endNodes);
+			}
+		}
 
-				for(DFGNode n : nodes) {
-					if(!SupportedTypes.includes(n.type)) {
-						if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported type contained: "+n.type); }
-						loop.typesCompatable = false;
-						break;
-					}
-				}
+		private void determineLoopsRegisterTypeCompatability() {
+			for(final LoopDescription loop : allLoops.values()) {
+				loop.typesCompatable = determineRegisterTypeCompatability(loop.loopNode);
 			}
 		}
 
@@ -150,41 +257,7 @@ public class LoopFilterCFGCompatabilityAnalyser {
 
 			for(final LoopDescription loop : allLoops.values()) {
 				if(loop.loopNode instanceof CFGNode.ForAllLoopNode || loop.loopNode instanceof CFGNode.ForLoopNode) {
-					loop.bytecodesCompatable = true;
-	
-					Set<CFGNode> endNodes = new HashSet<CFGNode>();
-					loop.loopNode.getScopeNextNodes(endNodes);
-	
-					CFGIterator.iterateCFGFlow(new CFGNodeCallback() {
-						@Override
-						public boolean process(CFGNode node) {
-							if(node instanceof VanillaCFGNode) {
-								VanillaCFGNode vanilaNode = (VanillaCFGNode)node;
-								for(Bytecode b : vanilaNode.body.instructions) {
-									if(!(b instanceof Bytecode.GPUSupportedBytecode)) {
-										loop.bytecodesCompatable = false;
-										if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported bytecode contained: "+b); }
-										return false;
-									}
-								}
-							}
-							else if(!(node instanceof CFGNode.GPUSupportedNode)) {
-								loop.bytecodesCompatable = false;
-								if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported node contained: "+node); }
-								return false;
-							}
-							else {
-								CFGNode.GPUSupportedNode gpuNode = (CFGNode.GPUSupportedNode)node;
-								if(!gpuNode.isGPUSupported()) {
-									loop.bytecodesCompatable = false;
-									if(DEBUG) { System.err.println("Loop " + loop + " not compatable because non-supported node contained: "+node); }
-									return false;
-								}
-							}
-	
-							return true;
-						}
-					}, loop.loopNode, endNodes);
+					loop.bytecodesCompatable = determineBytecodeCompatability(loop.loopNode);
 				}
 				else {
 					loop.bytecodesCompatable = false;
