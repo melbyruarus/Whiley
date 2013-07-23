@@ -79,7 +79,7 @@ public class CFGCompatabilityAnalyser {
 
 			for(DFGNode n : nodes) {
 				if(!SupportedTypes.includes(n.type)) {
-					if(DEBUG) { System.err.println("Code not compatable because non-supported type contained: "+n.type); }
+					if(DEBUG) { System.err.println("Code not compatable because non-supported type contained: "+n.type+" " +n.register); }
 					typesCompatable = false;
 					break;
 				}
