@@ -633,7 +633,7 @@ public class OpenCLOpWriter {
 			if(nodesNeedingLabels.contains(node)) {
 				writer.print(LABEL_PREFIX);
 				writer.print(nodeIndexes.get(node));
-				writer.print(":\n");
+				writer.print(":;\n");
 			}
 		}
 
