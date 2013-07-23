@@ -1,9 +1,13 @@
 package whiley.gpgpu.OpenCL.Devices;
 
+import static org.jocl.CL.CL_DEVICE_ENDIAN_LITTLE;
+import static org.jocl.CL.CL_DEVICE_NAME;
+import static org.jocl.CL.clGetDeviceInfo;
+
 import java.util.Iterator;
 
-import org.jocl.*;
-import static org.jocl.CL.*;
+import org.jocl.Pointer;
+import org.jocl.cl_device_id;
 
 public class Device implements DeviceDependancy {
 	private final cl_device_id deviceId;
@@ -38,7 +42,10 @@ public class Device implements DeviceDependancy {
 	}
 
 	public String deviceDescription() {
-		return deviceId.toString();
+		byte[] data = new byte[1000];
+		clGetDeviceInfo(deviceId, CL_DEVICE_NAME, data.length, Pointer.to(data), null);
+		
+		return deviceId.toString() + " " + new String(data);
 	}
 
 	@Override
