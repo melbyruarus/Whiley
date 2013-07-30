@@ -90,9 +90,12 @@ public class LoopFilter {
 				Set<String> fringe = new HashSet<String>(calledFunctions);
 				while(!fringe.isEmpty()) {
 					String next = fringe.iterator().next();
-					fringe.addAll(functionsCalledByFunctions.get(next));
-					calledFunctions.addAll(functionsCalledByFunctions.get(next));
 					fringe.remove(next);
+					Set<String> func = functionsCalledByFunctions.get(next);
+					if(func != null) {
+						fringe.addAll(func);
+						calledFunctions.addAll(functionsCalledByFunctions.get(next));
+					}
 				}
 			}
 			rootNode = CFGOptimizer.process(rootNode, analyserResult, methodArgumentsDFGNodes);

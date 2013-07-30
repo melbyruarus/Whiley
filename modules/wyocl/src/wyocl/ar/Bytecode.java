@@ -323,7 +323,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		
 		@Override
 		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
-			writtenRegisters.add(new Pair<Integer, Type>(code.target, (Type)code.type));
+			writtenRegisters.add(new Pair<Integer, Type>(code.target, getAssignedType()));
 			readRegisters.add(code.operand);
 		}
 
@@ -331,8 +331,12 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 			return code.target;
 		}
 
-		public Type.EffectiveTuple getType() {
+		public Type.EffectiveTuple getDataStructureType() {
 			return code.type;
+		}
+		
+		public Type getAssignedType() {
+			return code.type.element(code.index);
 		}
 
 		public int getIndex() {

@@ -754,9 +754,9 @@ public class OpenCLOpWriter {
 
 		protected void writeTupleLoad(final TupleLoad b) {
 			writeIndents();
-			typeWriter.writeLHS(b.getTarget(), b.getType().element(b.getIndex()), writer);
+			typeWriter.writeLHS(b.getTarget(), b.getAssignedType(), writer);
 			writer.print(" = ");
-			typeWriter.writeTupleAccessor(b.getOperand(), (Type)b.getType(), new ExpressionWriter() {
+			typeWriter.writeTupleAccessor(b.getOperand(), (Type)b.getDataStructureType(), new ExpressionWriter() {
 				@Override
 				public void writeExpression(PrintWriter writer) {
 					writer.print(b.getIndex());

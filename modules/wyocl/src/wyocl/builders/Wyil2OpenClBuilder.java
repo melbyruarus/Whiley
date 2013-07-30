@@ -144,10 +144,9 @@ public class Wyil2OpenClBuilder implements Builder {
 		}
 		for(String s : calledFunctions) {
 			OpenCLFunctionDescription function = loopFilter.getFunctionDescriptions().get(s);
-			if(function == null) {
-				throw new InternalError("Couldn't find function description for: "+s);
+			if(function != null) {
+				writeOpenCLFunction(function, forwardDecPWriter, functionPWriter);
 			}
-			writeOpenCLFunction(function, forwardDecPWriter, functionPWriter);
 		}
 		loopFilter = null;
 

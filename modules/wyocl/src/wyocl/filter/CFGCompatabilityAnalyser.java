@@ -58,6 +58,15 @@ public class CFGCompatabilityAnalyser {
 		}
 		
 		public boolean getLoopCombatability() {
+			if(DEBUG) {
+				System.err.println(loopNode + " " + loopNode.getCausialWYILLangBytecode()
+						 + " " + bytecodesCompatable
+						 + " " + breaksCompatable
+						 + " " + dataDependanciesCompatable
+						 + " " + earlyReturnCompatable
+						 + " " + typesCompatable
+						 + " " + functionCallsCompatable);
+			}
 			return bytecodesCompatable && breaksCompatable && dataDependanciesCompatable && earlyReturnCompatable && typesCompatable && functionCallsCompatable;
 		}
 	}
@@ -206,15 +215,17 @@ public class CFGCompatabilityAnalyser {
 									Type.FunctionOrMethod type = ((Bytecode.Invoke) b).getType();
 									String mangledName = SymbolUtilities.nameMangle(name.name(), type);
 									loop.functionCalls.add(mangledName);
-									
+																		
 									Boolean ok = compatableFunctions.get(mangledName);
 									if(ok == null) {
 										if(DEBUG) { System.err.println("Loop " + loop + " not compatable because unresolved function called: "+name); }
 										loop.functionCallsCompatable = false;
+										return false;
 									}
 									else if(ok == false) {
 										if(DEBUG) { System.err.println("Loop " + loop + " not compatable because unsupported function called: "+name); }
 										loop.functionCallsCompatable = false;
+										return false;
 									}
 								}
 							}
@@ -246,6 +257,7 @@ public class CFGCompatabilityAnalyser {
 						public boolean process(CFGNode node) {
 							if(node instanceof CFGNode.ReturnNode) {
 								loop.earlyReturnCompatable = false;
+								if(DEBUG) { System.err.println("Loop not compatable because early return not supported"); }
 								return false;
 							}
 
@@ -265,6 +277,7 @@ public class CFGCompatabilityAnalyser {
 				}
 				else {
 					loop.bytecodesCompatable = false;
+					if(DEBUG) { System.err.println("Loop not compatable as wrong type: " + loop.loopNode.getClass().getCanonicalName()); }
 				}
 			}
 		}
