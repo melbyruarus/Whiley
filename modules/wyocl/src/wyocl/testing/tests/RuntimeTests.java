@@ -27,4 +27,5 @@ public class RuntimeTests extends TestHarness {
 	@Test public void MultipleKernels() { runTest("MultipleKernels"); }
 	@Test public void GameOfLife() { runTest("gameoflife"); }
 	@Test public void GaussianBlur() { runTest("gaussian_blur"); }
+	@Test public void ReduceSum() { runTest("reduce_sum"); }
 }

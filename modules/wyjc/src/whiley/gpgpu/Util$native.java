@@ -88,7 +88,7 @@ public class Util$native {
 		if(start == end) {
 			return arguments;
 		}
-		
+				
 		try {
 			DeviceList devices = DeviceList.devicesOfType(DeviceType.GPU, 1);
 			if (devices.count() < 1) {
@@ -128,6 +128,7 @@ public class Util$native {
 					setArgument(argumentCount, k, q, item, memoryArguments, null, writeEvents, byteOrder);
 				} catch (KernelArgumentException e) {
 					if(e.status == CL.CL_INVALID_ARG_INDEX) {
+						System.err.println("Wrong arguments to kernel: " + arguments);
 						throw new IllegalArgumentException("Incorrect number of arguments to kernel, too many specified, expected " + argumentCount, e);
 					}
 					else {
@@ -143,6 +144,7 @@ public class Util$native {
 			}
 			catch(KernelExecutionException e) {
 				if(e.status == CL.CL_INVALID_KERNEL_ARGS) {
+					System.err.println("Wrong arguments to kernel: " + arguments);
 					throw new IllegalArgumentException("Incorrect number of arguments to kernel, only got " + argumentCount + " expecting more", e);
 				}
 				else {
