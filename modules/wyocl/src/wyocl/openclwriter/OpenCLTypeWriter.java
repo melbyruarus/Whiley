@@ -85,6 +85,10 @@ public class OpenCLTypeWriter {
 			writer.print(primitiveType((Type.Leaf)type.element()));
 			writer.print(" *"+variableName(register, type));
 			
+			if(writer == boilerPlateWriter) {
+				writer.println(';');
+			}
+			
 			boilerPlateWriter.println("// Begin register "+register+" list unpacking");
 			boilerPlateWriter.println("int "+variableName(register, type)+SIZE_SUFFIX+" = "+variableName(register, type)+"?((__global int *)"+variableName(register, type)+")[0]:0;");
 			boilerPlateWriter.println(variableName(register, type)+" = (__global "+primitiveType((Type.Leaf)type.element())+" *)(((int *)"+variableName(register, type)+") + 1);");
@@ -134,6 +138,10 @@ public class OpenCLTypeWriter {
 			}
 			writer.print(primitiveType((Type.Leaf)type.element(0)));
 			writer.print(" *"+variableName(register, type));
+			
+			if(writer == boilerPlateWriter) {
+				writer.println(';');
+			}
 			
 			boilerPlateWriter.println("// Begin register "+register+" tuple unpacking");
 			boilerPlateWriter.println("int "+variableName(register, type)+SIZE_SUFFIX+" = "+variableName(register, type)+"?((__global int *)"+variableName(register, type)+")[0]:0;");
@@ -231,7 +239,7 @@ public class OpenCLTypeWriter {
 			defn.writeAccessor(writer);
 		}
 		else {
-			throw new RuntimeException("Use of undefined variable: "+operand+ " of type: " + type);
+			throw new RuntimeException("Use of undefined variable: "+operand+ " of type: " + type + ". However do have: " + definedVariables.get(operand));
 		}
 	}
 

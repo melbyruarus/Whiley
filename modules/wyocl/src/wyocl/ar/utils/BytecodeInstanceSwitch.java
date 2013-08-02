@@ -13,6 +13,7 @@ import wyocl.ar.Bytecode.LengthOf;
 import wyocl.ar.Bytecode.Load;
 import wyocl.ar.Bytecode.LoopEnd;
 import wyocl.ar.Bytecode.Move;
+import wyocl.ar.Bytecode.Nop;
 import wyocl.ar.Bytecode.Not;
 import wyocl.ar.Bytecode.Return;
 import wyocl.ar.Bytecode.Switch;
@@ -44,6 +45,7 @@ public class BytecodeInstanceSwitch {
 		void visitReturn(Return b);
 		void visitInvoke(Invoke b);
 		void visitNot(Not b);
+		void visitNop(Nop b);
 	}
 	
 	public static void on(Bytecode.GPUSupportedBytecode b, BytecodeInstanceSwitchVisitor visitor) {
@@ -106,6 +108,9 @@ public class BytecodeInstanceSwitch {
 		}
 		else if(b instanceof Bytecode.Not) {
 			visitor.visitNot((Bytecode.Not)b);
+		}
+		else if(b instanceof Bytecode.Nop) {
+			visitor.visitNop((Bytecode.Nop)b);
 		}
 		else {
 			throw new RuntimeException("Unknown bytecode encountered: "+b+" ("+b.getClass()+")");

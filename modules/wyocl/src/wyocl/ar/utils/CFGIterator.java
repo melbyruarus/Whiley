@@ -26,7 +26,7 @@ public class CFGIterator {
 		}
 		
 		fringe.add(start);
-		
+				
 		while(!fringe.isEmpty()) {
 			CFGNode node = fringe.iterator().next();
 			processed.add(node);

@@ -30,6 +30,7 @@ import wyocl.ar.Bytecode.LengthOf;
 import wyocl.ar.Bytecode.Load;
 import wyocl.ar.Bytecode.LoopEnd;
 import wyocl.ar.Bytecode.Move;
+import wyocl.ar.Bytecode.Nop;
 import wyocl.ar.Bytecode.Not;
 import wyocl.ar.Bytecode.Return;
 import wyocl.ar.Bytecode.Switch;
@@ -306,17 +307,17 @@ public class OpenCLOpWriter {
 
 			writeIndents();
 			writer.print("for(");
-			typeWriter.writeLHS(node.getIndexRegister(), node.getType(), writer);
+			typeWriter.writeLHS(node.getIndexRegister(), node.getIndexType(), writer);
 			writer.print(" = ");
-			typeWriter.writeRHS(node.getStartRegister(), node.getType(), writer);
+			typeWriter.writeRHS(node.getStartRegister(), node.getIndexType(), writer);
 			writer.print("; ");
-			typeWriter.writeLHS(node.getIndexRegister(), node.getType(), writer);
+			typeWriter.writeLHS(node.getIndexRegister(), node.getIndexType(), writer);
 			writer.print(" < ");
-			typeWriter.writeRHS(node.getEndRegister(), node.getType(), writer);
+			typeWriter.writeRHS(node.getEndRegister(), node.getIndexType(), writer);
 			writer.print("; ");
-			typeWriter.writeLHS(node.getIndexRegister(), node.getType(), writer);
+			typeWriter.writeLHS(node.getIndexRegister(), node.getIndexType(), writer);
 			writer.print(" = ");
-			typeWriter.writeRHS(node.getIndexRegister(), node.getType(), writer);
+			typeWriter.writeRHS(node.getIndexRegister(), node.getIndexType(), writer);
 			writer.print(" + 1) {\n");
 
 			checkAndAddJumpsIfNeeded(node, node.body);
@@ -417,7 +418,7 @@ public class OpenCLOpWriter {
 			checkAndAddLabelIfNeeded(node);
 
 			for(Bytecode b : node.body.instructions) {
-				if(!(b instanceof Bytecode.GPUSupportedBytecode)) {
+				if(!(b instanceof Bytecode.GPUSupportedBytecode && ((Bytecode.GPUSupportedBytecode)b).isGPUCompatable())) {
 					throw new RuntimeException("Internal inconsistancy exception");
 				}
 
@@ -520,6 +521,11 @@ public class OpenCLOpWriter {
 					@Override
 					public void visitNot(Not b) {
 						writeNot(b);
+					}
+
+					@Override
+					public void visitNop(Nop b) {
+						writeNop(b);
 					}
 				});
 			}
@@ -642,6 +648,11 @@ public class OpenCLOpWriter {
 			typeWriter.writeLHS(b.getTarget(), b.getType(), writer);
 			writer.print(" = !");
 			typeWriter.writeRHS(b.getOperand(), b.getType(), writer);
+			writeLineEnd(b);
+		}
+		
+		protected void writeNop(Nop b) {
+			writeIndents();
 			writeLineEnd(b);
 		}
 

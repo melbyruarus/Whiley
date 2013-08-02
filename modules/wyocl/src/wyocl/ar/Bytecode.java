@@ -53,6 +53,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 	 *
 	 */
 	public static interface GPUSupportedBytecode {
+		boolean isGPUCompatable();
 	}
 	
 	/**
@@ -129,6 +130,19 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		public int getOperand() {
 			return code.operand;
 		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			switch(getArithKind()) {
+				case NEG:
+					return true;
+				case DENOMINATOR:
+				case NUMERATOR:
+					return false;
+				default:
+					throw new RuntimeException("Unknown unarithkind found: " + getArithKind());
+			}
+		}
 	}
 	
 	public static class Binary extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
@@ -162,6 +176,27 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		public int getRightOperand() {
 			return code.rightOperand;
 		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			switch(getArithKind()) {
+				case ADD:
+				case SUB:
+				case MUL:
+				case DIV:
+				case BITWISEAND:
+				case BITWISEOR:
+				case BITWISEXOR:
+				case LEFTSHIFT:
+				case RIGHTSHIFT:
+				case REM:
+					return true;
+				case RANGE:
+					return false;
+				default:
+					throw new RuntimeException("Unknown binarithkind found: " + getArithKind());
+			}
+		}
 	}
 	
 	public static class ConstLoad extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
@@ -180,6 +215,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		
 		public int getTarget() {
 			return code.target;
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return getConstant().type() instanceof Type.Leaf;
 		}
 	}
 	
@@ -205,6 +245,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		public int getOperand() {
 			return code.operand;
 		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
+		}
 	}
 	
 	public static class Move extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
@@ -228,6 +273,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		
 		public int getOperand() {
 			return code.operand;
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
 		}
 	}
 	
@@ -257,6 +307,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		public int getOperand() {
 			return code.operand;
 		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
+		}
 	}
 	
 	public static class Load extends Bytecode implements Bytecode.Data, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
@@ -266,7 +321,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		
 		@Override
 		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
-			writtenRegisters.add(new Pair<Integer, Type>(code.target, (Type)code.type));
+			writtenRegisters.add(new Pair<Integer, Type>(code.target, getAssignedType()));
 			readRegisters.add(code.leftOperand);
 			readRegisters.add(code.rightOperand);
 		}
@@ -289,6 +344,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 
 		public Type getAssignedType() {
 			return code.assignedType();
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
 		}
 	}
 	
@@ -313,6 +373,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 
 		public Type.EffectiveCollection getDataStructureType() {
 			return code.type;
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
 		}
 	}
 	
@@ -345,6 +410,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 
 		public int getOperand() {
 			return code.operand;
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
 		}
 	}
 	
@@ -385,6 +455,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 
 		public Type getRHSType() {
 			return code.rhs();
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return getDataStructureBeforeType() instanceof Type.List || getDataStructureBeforeType() instanceof Type.Tuple;
 		}
 	}
 	
@@ -549,6 +624,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		
 		public Type getType() {
 			return code.type;
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
 		}
 	}
 
@@ -720,6 +800,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		public DFGNode getSourceDFGNode() {
 			return readDFGNodes.get(getSourceRegister());
 		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
+		}
 	}
 	
 	public static class While extends Bytecode implements Bytecode.Loop, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
@@ -735,6 +820,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		@Override
 		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
+		}
 	}
 	
 	public static class UnconditionalJump extends Bytecode implements Bytecode.Jump, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
@@ -748,6 +838,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		
 		@Override
 		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
 		}
 	}
 	
@@ -787,6 +882,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 
 		public Type getType() {
 			return code.type;
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
 		}
 	}
 	
@@ -848,6 +948,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		public Type getType() {
 			return code.type;
 		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
+		}
 	}
 	
 	public static class Label extends Bytecode implements Bytecode.Control, Bytecode.Target, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
@@ -863,6 +968,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		@Override
 		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
 		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
+		}
 	}
 	
 	public static class LoopEnd extends Bytecode implements Bytecode.Control, Bytecode.Target, Bytecode.GPUSupportedBytecode, Bytecode.SideeffectFree {
@@ -877,6 +987,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		
 		@Override
 		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
 		}
 	}
 	
@@ -902,6 +1017,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 
 		public boolean isVoid() {
 			return code.type == Type.T_VOID;
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
 		}
 	}
 	
@@ -932,6 +1052,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 
 		public NameID getName() {
 			return code.name;
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
 		}
 	}
 	
@@ -1025,6 +1150,19 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		}
 	}
 	
+	public static class Nop extends Bytecode implements GPUSupportedBytecode, SideeffectFree {
+		
+		public Nop() { super(Code.Nop); }
+
+		@Override
+		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
+		}
+
+		@Override
+		public boolean isGPUCompatable() {
+			return true;
+		}
+	}
 	
 	public static Bytecode bytecodeForCode(Code code) {
 		if(code instanceof Code.ForAll) {
@@ -1034,7 +1172,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 			return new Bytecode.While((Code.Loop)code);
 		}
 		else if(code instanceof Code.Nop) {
-			return null;
+			return new Bytecode.Nop();
 		}
 		else if(code instanceof Code.TryCatch) {
 			return new Bytecode.TryCatch((Code.TryCatch)code);
@@ -1055,7 +1193,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 			return new Bytecode.Label((Code.Label)code);
 		}
 		else if(code instanceof Code.Assert) { // FIXME: Add these back, just skip when OpenCL
-			return null;//return new Bytecode.Assert((Code.Assert)code);
+			return new Bytecode.Nop();//return new Bytecode.Assert((Code.Assert)code);
 		}
 		else if(code instanceof Code.Assign) {
 			return new Bytecode.Assign((Code.Assign)code);
@@ -1070,7 +1208,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 			return new Bytecode.Dereference((Code.Dereference)code);
 		}
 		else if(code instanceof Code.Assume) { // FIXME: Add these back, just skip when OpenCL
-			return null;//return new Bytecode.Assume((Code.Assume)code);
+			return new Bytecode.Nop();//return new Bytecode.Assume((Code.Assume)code);
 		}
 		else if(code instanceof Code.FieldLoad) {
 			return new Bytecode.FieldLoad((Code.FieldLoad)code);

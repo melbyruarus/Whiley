@@ -119,7 +119,7 @@ public class LoopFilterLoopProcessor {
 		int count = 0;
 		for(Argument arg : kernelArguments) {
 			replacementEntries.add(new Block.Entry(Code.Const(temporaryCounterRegister, Constant.V_INTEGER(BigInteger.valueOf(count)))));
-			replacementEntries.add(new Block.Entry(Code.IndexOf(Type.List(arg.type, true), arg.register, temporaryListRegister, temporaryCounterRegister)));
+			replacementEntries.add(new Block.Entry(Code.IndexOf(Type.List(arg.type, false), arg.register, temporaryListRegister, temporaryCounterRegister)));
 			count++;
 		}
 

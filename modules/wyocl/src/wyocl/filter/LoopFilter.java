@@ -80,11 +80,19 @@ public class LoopFilter {
 		CFGNode rootNode = CFGGenerator.processEntries(entries, exitPoints, unresolvedTargets, methodArgumentsDFGNodes);
 		
 		try {
+			rootNode = CFGOptimizer.processBeforeAnalysis(rootNode, methodArgumentsDFGNodes);
+			
 			List<CFGIterator.Entry> sortedCFG = CFGIterator.createNestedRepresentation(rootNode);
+			final LoopAnalyserResult prelimAnalyserResult = CFGCompatabilityAnalyser.analyse(rootNode, sortedCFG, functionCompatabilities);
+			
+			rootNode = CFGOptimizer.processAfterAnalysis(rootNode, prelimAnalyserResult, methodArgumentsDFGNodes);
+			
+			sortedCFG = CFGIterator.createNestedRepresentation(rootNode);
 			final LoopAnalyserResult analyserResult = CFGCompatabilityAnalyser.analyse(rootNode, sortedCFG, functionCompatabilities);
 			if(!analyserResult.anyLoopsCompatable) {
-				return null;
+				return createBlock(analyserResult, finalkernels, rootNode, blk);
 			}
+			
 			if(calledFunctions != null) {
 				calledFunctions.addAll(analyserResult.loopCalledFunctions);
 				Set<String> fringe = new HashSet<String>(calledFunctions);
@@ -98,7 +106,6 @@ public class LoopFilter {
 					}
 				}
 			}
-			rootNode = CFGOptimizer.process(rootNode, analyserResult, methodArgumentsDFGNodes);
 			
 			CFGIterator.iterateCFGFlow(new CFGNodeCallback() {
 				@Override
@@ -112,73 +119,77 @@ public class LoopFilter {
 				}
 			}, rootNode, null);
 						
-			final List<Entry> blockEntries = new ArrayList<Entry>();
-						
-			CFGIterator.iterateCFGScope(new CFGNodeCallback() {
-				@Override
-				public boolean process(CFGNode node) {
-					if(node instanceof CFGNode.LoopNode) {
-						CFGNode.LoopNode loop = (CFGNode.LoopNode)node;
-						
-						if(analyserResult.loopCompatabilities.get(loop) == null) {
-							throw new InternalError("Loop combatabilities have not been determined for: " + loop);
-						}
-						
-						if(analyserResult.loopCompatabilities.get(loop) == LoopType.CPU_EXPLICIT) {
-							processCompatableNode(node);
-						}
-						else {
-							if(finalkernels.get(loop) == null) {
-								throw new InternalError("Loop replacements should have been computed for: " + loop + " with compatability: " + analyserResult.loopCompatabilities.get(loop));
-							}
-							
-							if(analyserResult.loopCompatabilities.get(loop) == LoopType.GPU_IMPLICIT) {
-								blockEntries.add(new Entry(Code.Label(CFGNode.calculateLabel(loop))));
-								blockEntries.addAll(finalkernels.get(loop).replacementEntries);
-								blockEntries.add(new Entry(Code.Goto(CFGNode.calculateLabel(loop.endNode.next))));
-							}
-						}
-					}
-					else {
-						processCompatableNode(node);
-					}
-					return true;
-				}
-
-				private void processCompatableNode(CFGNode node) {
-					node.forBytecode(new BytecodeVisitor() {
-						@Override
-						public void visit(Bytecode b) {
-							blockEntries.add(new Entry(b.getWYILLangBytecode()));
-						}
-
-						@Override
-						public boolean shouldVisitNode(CFGNode node) {
-							if(node instanceof CFGNode.LoopNode) {
-								CFGNode.LoopNode loop = (CFGNode.LoopNode)node;
-								if(analyserResult.loopCompatabilities.get(loop) == LoopType.CPU_EXPLICIT) {
-									return true;
-								}
-								else {
-									blockEntries.add(new Entry(Code.Label(CFGNode.calculateLabel(loop))));
-									blockEntries.addAll(finalkernels.get(loop).replacementEntries);
-									blockEntries.add(new Entry(Code.Goto(CFGNode.calculateLabel(loop.endNode.next))));
-									return false;
-								}
-							}
-							else {
-								return true;
-							}
-						}
-					});
-				}
-			}, rootNode, null);
-			
-			return new Block(blk.numInputs(), blockEntries);
+			return createBlock(analyserResult, finalkernels, rootNode, blk);
 		} catch (NotADAGException e) {
 			System.err.println("Somehow the current block has a CFG which is not a DAG -> ???? leaving this block entirely on the CPU for the time being");
 			return null;
 		}
+	}
+
+	private Block createBlock(final LoopAnalyserResult analyserResult, final Map<CFGNode.LoopNode, OpenCLKernelInvocationDescription> finalkernels, CFGNode rootNode, Block blk) {
+		final List<Entry> blockEntries = new ArrayList<Entry>();
+		
+		CFGIterator.iterateCFGScope(new CFGNodeCallback() {
+			@Override
+			public boolean process(CFGNode node) {
+				if(node instanceof CFGNode.LoopNode) {
+					CFGNode.LoopNode loop = (CFGNode.LoopNode)node;
+					
+					if(analyserResult.loopCompatabilities.get(loop) == null) {
+						throw new InternalError("Loop combatabilities have not been determined for: " + loop);
+					}
+					
+					if(analyserResult.loopCompatabilities.get(loop) == LoopType.CPU_EXPLICIT) {
+						processCompatableNode(node);
+					}
+					else {
+						if(finalkernels.get(loop) == null) {
+							throw new InternalError("Loop replacements should have been computed for: " + loop + " with compatability: " + analyserResult.loopCompatabilities.get(loop));
+						}
+						
+						if(analyserResult.loopCompatabilities.get(loop) == LoopType.GPU_IMPLICIT) {
+							blockEntries.add(new Entry(Code.Label(CFGNode.calculateLabel(loop))));
+							blockEntries.addAll(finalkernels.get(loop).replacementEntries);
+							blockEntries.add(new Entry(Code.Goto(CFGNode.calculateLabel(loop.endNode.next))));
+						}
+					}
+				}
+				else {
+					processCompatableNode(node);
+				}
+				return true;
+			}
+
+			private void processCompatableNode(CFGNode node) {
+				node.forBytecode(new BytecodeVisitor() {
+					@Override
+					public void visit(Bytecode b) {
+						blockEntries.add(new Entry(b.getWYILLangBytecode()));
+					}
+
+					@Override
+					public boolean shouldVisitNode(CFGNode node) {
+						if(node instanceof CFGNode.LoopNode) {
+							CFGNode.LoopNode loop = (CFGNode.LoopNode)node;
+							if(analyserResult.loopCompatabilities.get(loop) == LoopType.CPU_EXPLICIT) {
+								return true;
+							}
+							else {
+								blockEntries.add(new Entry(Code.Label(CFGNode.calculateLabel(loop))));
+								blockEntries.addAll(finalkernels.get(loop).replacementEntries);
+								blockEntries.add(new Entry(Code.Goto(CFGNode.calculateLabel(loop.endNode.next))));
+								return false;
+							}
+						}
+						else {
+							return true;
+						}
+					}
+				});
+			}
+		}, rootNode, null);
+		
+		return new Block(blk.numInputs(), blockEntries);
 	}
 
 	private OpenCLFunctionDescription processFunction(NameID name, Block blk, Type.FunctionOrMethod type) {

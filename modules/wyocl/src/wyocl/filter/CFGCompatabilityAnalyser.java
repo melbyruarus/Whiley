@@ -110,7 +110,7 @@ public class CFGCompatabilityAnalyser {
 					if(node instanceof VanillaCFGNode) {
 						VanillaCFGNode vanilaNode = (VanillaCFGNode)node;
 						for(Bytecode b : vanilaNode.body.instructions) {
-							if(!(b instanceof Bytecode.GPUSupportedBytecode)) {
+							if(!(b instanceof Bytecode.GPUSupportedBytecode && ((Bytecode.GPUSupportedBytecode)b).isGPUCompatable())) {
 								bytecodesCompatable[0] = false;
 								if(DEBUG) { System.err.println("Code not compatable because non-supported bytecode contained: "+b); }
 								return false;

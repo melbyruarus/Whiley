@@ -12,6 +12,7 @@ import wyocl.ar.Bytecode;
 import wyocl.ar.CFGGenerator;
 import wyocl.ar.CFGNode;
 import wyocl.ar.CFGNode.ForAllLoopNode;
+import wyocl.ar.CFGNode.ForLoopNode;
 import wyocl.ar.DFGGenerator;
 import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator;
@@ -20,7 +21,7 @@ import wyocl.filter.CFGCompatabilityAnalyser.LoopAnalyserResult;
 import wyocl.filter.LoopType;
 
 public class ForallToForOptimisationStage {
-	public static void process(final CFGNode.DummyNode rootNode, final LoopAnalyserResult analyserResult, final Map<Integer, DFGNode> argumentRegisters) {
+	public static void processBeforeAnalysis(final CFGNode.DummyNode rootNode, final Map<Integer, DFGNode> argumentRegisters) {
 		final boolean[] earlyFinish = new boolean[1];
 		earlyFinish[0] = true;
 		while(earlyFinish[0]) {
@@ -29,7 +30,7 @@ public class ForallToForOptimisationStage {
 			CFGIterator.iterateCFGFlow(new CFGIterator.CFGNodeCallback() {
 				@Override
 				public boolean process(CFGNode node) {
-					if(node instanceof CFGNode.ForAllLoopNode && analyserResult.loopCompatabilities.get(node) != LoopType.CPU_EXPLICIT) {
+					if(node instanceof CFGNode.ForAllLoopNode) {
 						CFGNode.ForAllLoopNode loop = (CFGNode.ForAllLoopNode)node;
 						DFGNode sourceDFGNode = loop.getBytecode().getSourceDFGNode();
 						if(sourceDFGNode.type instanceof Type.EffectiveList) {
@@ -54,7 +55,7 @@ public class ForallToForOptimisationStage {
 							}
 
 							if(allAreRanges) {
-								replaceForAllWithFor(loop, listCreationBytecodes, analyserResult);
+								replaceForAllWithFor(loop, listCreationBytecodes);
 								earlyFinish[0] = true;
 
 
@@ -72,11 +73,41 @@ public class ForallToForOptimisationStage {
 		}
 	}
 	
-	private static void replaceForAllWithFor(ForAllLoopNode loop, Set<Bytecode.Binary> listCreationBytecodes, final LoopAnalyserResult analyserResult) {
+	public static void processAfterAnalysis(final CFGNode.DummyNode rootNode, final LoopAnalyserResult analyserResult, final Map<Integer, DFGNode> argumentRegisters) {
+		final boolean[] earlyFinish = new boolean[1];
+		earlyFinish[0] = true;
+		while(earlyFinish[0]) {
+			earlyFinish[0] = false;
+
+			CFGIterator.iterateCFGFlow(new CFGIterator.CFGNodeCallback() {
+				@Override
+				public boolean process(CFGNode node) {
+					if(node instanceof CFGNode.ForLoopNode) {
+						CFGNode.ForLoopNode loop = (CFGNode.ForLoopNode)node;
+						
+						if(analyserResult.loopCompatabilities.get(loop) == LoopType.CPU_EXPLICIT) {
+							replaceForWithForAll(loop, analyserResult);
+							
+							earlyFinish[0] = true;
+	
+							CFGGenerator.populateIdentifiers(rootNode, 0);
+							DFGGenerator.clearDFG(rootNode);
+							DFGGenerator.populateDFG(rootNode, argumentRegisters);
+	
+							return false; // Have to stop iterating as we have just modified the CFG, outer loop will restart iteration
+						}
+					}
+					return true;
+				}
+			}, rootNode, null);
+		}
+	}
+	
+	private static void replaceForAllWithFor(ForAllLoopNode loop, Set<Bytecode.Binary> listCreationBytecodes) {
 		//------------------------
 		// Perform actual swap
 		//------------------------
-		Type.Leaf indexType = (Type.Leaf)loop.getBytecode().getIndexType();
+		Type.Leaf indexType = (Type.Leaf)loop.getIndexType();
 
 		int lowerRegister = DFGIterator.maxUsedRegister(loop) + 1;
 		int upperRegister = lowerRegister+1;
@@ -96,40 +127,38 @@ public class ForallToForOptimisationStage {
 											indexType, lowerRegister, upperRegister, loop.loopEndLabel(),
 											loop.startIndex, loop.endIndex, loop.getCausialWYILLangBytecode());
 
-		forLoop.body = loop.body;
-		loop.body = null;
-		forLoop.body.previous.remove(loop);
-		forLoop.body.previous.add(forLoop);
+		loop.replaceWith(forLoop);
+	}
+	
+	private static void replaceForWithForAll(ForLoopNode loop, final LoopAnalyserResult analyserResult) {
+		//------------------------
+		// Perform actual swap
+		//------------------------
+		Type.Leaf indexType = loop.getIndexType();
 
-		for(CFGNode.LoopBreakNode oldNode : loop.breakNodes) {
-			CFGNode.LoopBreakNode newNode = new CFGNode.LoopBreakNode(forLoop);
-			newNode.previous.addAll(oldNode.previous);
-			for(CFGNode n : newNode.previous) {
-				n.retargetNext(oldNode, newNode);
-			}
-			oldNode.previous.clear();
-			newNode.next = oldNode.next;
-			oldNode.next = null;
-			forLoop.breakNodes.add(newNode);
+		int listRegister = DFGIterator.maxUsedRegister(loop) + 1;
+
+		CFGNode.VanillaCFGNode newVanillaNode = new CFGNode.VanillaCFGNode();
+		newVanillaNode.body.instructions.add(new Bytecode.Binary(Code.BinArithOp(Type.List(loop.getIndexType(), false), listRegister, loop.getStartRegister(), loop.getEndRegister(), BinArithKind.RANGE)));
+
+		CFGNode.ForAllLoopNode forLoop = new CFGNode.ForAllLoopNode(new Bytecode.ForAll(Code.ForAll(Type.List(indexType, false),
+																		listRegister,
+																		loop.getIndexRegister(),
+																		((Code.Loop)loop.getCausialWYILLangBytecode()).modifiedOperands,
+																		loop.loopEndLabel())),
+																	loop.startIndex,
+																	loop.endIndex);
+
+		loop.replaceWith(forLoop);
+		
+		for(CFGNode p : forLoop.previous) {
+			p.retargetNext(forLoop, newVanillaNode);
 		}
-		loop.breakNodes.clear();
-
-		forLoop.endNode.next = loop.endNode.next;
-		loop.endNode.next = null;
-		forLoop.endNode.next.previous.remove(loop.endNode);
-		forLoop.endNode.next.previous.add(forLoop.endNode);
-		forLoop.endNode.previous.addAll(loop.endNode.previous);
-		for(CFGNode p : forLoop.endNode.previous) {
-			p.retargetNext(loop.endNode, forLoop.endNode);
-		}
-		loop.endNode.previous.clear();
-
-
-		forLoop.previous.addAll(loop.previous);
-		loop.previous.clear();
-		for(CFGNode n : forLoop.previous) {
-			n.retargetNext(loop, forLoop);
-		}
+		
+		newVanillaNode.previous.addAll(forLoop.previous);
+		forLoop.previous.clear();
+		forLoop.previous.add(newVanillaNode);
+		newVanillaNode.next = forLoop;
 		
 		//------------------------
 		// Update analyser results

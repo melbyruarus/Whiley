@@ -133,6 +133,10 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 
 	public abstract void retargetNext(CFGNode oldNode, CFGNode newNode);
 	
+	public abstract boolean isEmpty();
+	
+	public abstract void disconnect();
+	
 	/**
 	 * Visit all the bytecodes in this node in order
 	 * 
@@ -237,6 +241,22 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			
 			gotoLabel(calculateLabel(next), bytecodeVisitor);
 		}
+
+		@Override
+		public boolean isEmpty() {
+			return body.instructions.isEmpty();
+		}
+
+		@Override
+		public void disconnect() {
+			for(CFGNode n : previous) {
+				n.retargetNext(this, next);
+			}
+			next.previous.remove(this);
+			next.previous.addAll(previous);
+			previous.clear();
+			next = null;
+		}
 	}
 
 	public static class Block {
@@ -328,6 +348,62 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		public Code getCausialWYILLangBytecode() { // FIXME: remove once performing bytecode-cfg-bytecode conversions
 			return causialLoopBytecode;
 		}
+		
+		public void replaceWith(LoopNode newLoop) {
+			newLoop.body = this.body;
+			this.body = null;
+			newLoop.body.previous.remove(this);
+			newLoop.body.previous.add(newLoop);
+
+			for(CFGNode.LoopBreakNode oldNode : this.breakNodes) {
+				CFGNode.LoopBreakNode newNode = new CFGNode.LoopBreakNode(newLoop);
+				newNode.previous.addAll(oldNode.previous);
+				for(CFGNode n : newNode.previous) {
+					n.retargetNext(oldNode, newNode);
+				}
+				oldNode.previous.clear();
+				newNode.next = oldNode.next;
+				oldNode.next = null;
+				newLoop.breakNodes.add(newNode);
+			}
+			this.breakNodes.clear();
+
+			newLoop.endNode.next = this.endNode.next;
+			this.endNode.next = null;
+			newLoop.endNode.next.previous.remove(this.endNode);
+			newLoop.endNode.next.previous.add(newLoop.endNode);
+			newLoop.endNode.previous.addAll(this.endNode.previous);
+			for(CFGNode p : newLoop.endNode.previous) {
+				p.retargetNext(this.endNode, newLoop.endNode);
+			}
+			this.endNode.previous.clear();
+
+
+			newLoop.previous.addAll(this.previous);
+			this.previous.clear();
+			for(CFGNode n : newLoop.previous) {
+				n.retargetNext(this, newLoop);
+			}
+		}
+		
+		@Override
+		public boolean isEmpty() {
+			return body == endNode || body.isEmpty();
+		}
+
+		@Override
+		public void disconnect() {
+			for(CFGNode n : previous) {
+				n.retargetNext(this, endNode.next);
+			}
+			endNode.next.previous.remove(this);
+			endNode.next.previous.addAll(previous);
+			previous.clear();
+			endNode.next = null;
+			for(LoopBreakNode n : breakNodes) {
+				n.next = null;
+			}
+		}
 	}
 
 	public static class ForAllLoopNode extends CFGNode.LoopNode implements GPUSupportedNode {
@@ -394,6 +470,10 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			} catch (NotADAGException e) {
 				throw new InternalError("Loop body should be dag");
 			}
+		}
+
+		public Type getIndexType() {
+			return bytecode.getIndexType();
 		}
 	}
 
@@ -515,8 +595,16 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			return indexRegister;
 		}
 
-		public Type getType() {
+		public Type.Leaf getIndexType() {
 			return type;
+		}
+		
+		public DFGNode getStartDFGNode() {
+			return startDFG;
+		}
+		
+		public DFGNode getEndDFGNode() {
+			return endDFG;
 		}
 
 		@Override
@@ -654,6 +742,16 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			
 			gotoLabel(calculateLabel(next), bytecodeVisitor);
 		}
+
+		@Override
+		public boolean isEmpty() {
+			return false;
+		}
+
+		@Override
+		public void disconnect() {
+			// Do nothing as loop parent will deal with it
+		}
 	}
 
 	public static class LoopEndNode extends CFGNode implements GPUSupportedNode {
@@ -711,6 +809,16 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			
 			gotoLabel(calculateLabel(next), bytecodeVisitor);
 		}
+
+		@Override
+		public boolean isEmpty() {
+			return false;
+		}
+
+		@Override
+		public void disconnect() {
+			// Do nothing as loop parent will deal with it
+		}
 	}
 
 	/**
@@ -724,7 +832,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		private final Bytecode.Switch switchBytecode;
 
 		public List<Pair<Constant, CFGNode>> branches = new ArrayList<Pair<Constant, CFGNode>>();
-		public CFGNode defaultBranch;
+		public CFGNode defaultBranch; // Will never be null
 
 		public MultiConditionalJumpNode(Bytecode.Switch switchBytecode) {this.switchBytecode = switchBytecode;}
 
@@ -825,6 +933,34 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		public Type getCheckedType() {
 			return switchBytecode.getType();
 		}
+
+		@Override
+		public boolean isEmpty() {
+			if(!branches.isEmpty()) {
+				for(Pair<Constant, CFGNode> p : branches) {
+					if(!p.second().isEmpty()) {
+						return false;
+					}
+				}
+			}
+			
+			return true;
+		}
+
+		@Override
+		public void disconnect() {
+			for(CFGNode n : previous) {
+				n.retargetNext(this, defaultBranch);
+			}
+			defaultBranch.previous.remove(this);
+			defaultBranch.previous.addAll(previous);
+			previous.clear();
+			defaultBranch = null;
+			for(Pair<Constant, CFGNode> p : branches) {
+				p.second().previous.remove(this);
+			}
+			branches.clear();
+		}
 	}
 
 	/**
@@ -882,7 +1018,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 
 		@Override
 		public boolean isGPUSupported() {
-			return conditionalJump instanceof Bytecode.GPUSupportedBytecode;
+			return conditionalJump instanceof Bytecode.GPUSupportedBytecode && ((Bytecode.GPUSupportedBytecode)conditionalJump).isGPUCompatable();
 		}
 
 		public ConditionalJump getBytecode() {
@@ -919,6 +1055,24 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			}
 			
 			bytecodeVisitor.visit(new Bytecode.UnconditionalJump(Code.Goto(unmetLabel)));
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return conditionMet == conditionUnmet;
+		}
+
+		@Override
+		public void disconnect() {
+			for(CFGNode n : previous) {
+				n.retargetNext(this, conditionUnmet);
+			}
+			conditionUnmet.previous.remove(this);
+			conditionUnmet.previous.addAll(previous);
+			previous.clear();
+			conditionMet.previous.remove(this);
+			conditionMet = null;
+			conditionUnmet = null;
 		}
 	}
 
@@ -994,6 +1148,19 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 				bytecodeVisitor.visit(new Bytecode.Return(Code.Return(bytecode.getType(), bytecode.getOperand())));
 			}
 		}
+
+		@Override
+		public boolean isEmpty() {
+			return false;
+		}
+
+		@Override
+		public void disconnect() {
+			for(CFGNode n : previous) {
+				n.retargetNext(this, null);
+			}
+			previous.clear();
+		}
 	}
 
 	public static class UnresolvedTargetNode extends CFGNode {
@@ -1065,6 +1232,19 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
 			throw new InternalError(this.getClass().getSimpleName() + "  cannot be visited by BytecodeVisitor");
 		}
+
+		@Override
+		public boolean isEmpty() {
+			return false;
+		}
+
+		@Override
+		public void disconnect() {
+			for(CFGNode n : previous) {
+				n.retargetNext(this, null);
+			}
+			previous.clear();
+		}
 	}
 	
 	/**
@@ -1121,5 +1301,17 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		public void forBytecode(BytecodeVisitor bytecodeVisitor) {
 		}
 
+		@Override
+		public boolean isEmpty() {
+			return false;
+		}
+
+		@Override
+		public void disconnect() {
+			for(CFGNode n : previous) {
+				n.retargetNext(this, null);
+			}
+			previous.clear();
+		}
 	}
 }
