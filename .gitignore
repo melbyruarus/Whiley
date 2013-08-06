@@ -11,3 +11,4 @@
 lib
 modules/wycs/src/wycs/core/Types.java
 modules/wycs/src/wycs/solver/Solver.java
+*.results

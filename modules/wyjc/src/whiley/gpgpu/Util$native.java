@@ -80,11 +80,81 @@ public class Util$native {
 		}
 	}
 	
+	private static class GPUResult {
+		public long totalTime = 0;
+		public long initilizationTime = 0;
+		public long marshallingTime = 0;
+		public long uploadAndMarshallingTime = 0;
+		public long computeTime = 0;
+		public long downloadTime = 0;
+		public long unmarshallingTime = 0;
+		public long numberOfRuns = 0;
+	}
+	
+	private static boolean benchmarkingGPU = false;
+	private static ArrayList<ArrayList<GPUResult>> allResults = new ArrayList<ArrayList<GPUResult>>();
+	private static ArrayList<GPUResult> currentResult;
+	
+	public static void beginGPUBenchmarking() {		
+		benchmarkingGPU = true;
+		
+		currentResult = new ArrayList<GPUResult>();
+		allResults.add(currentResult);
+	}
+	
+	public static void endGPUBenchmarking() {
+		benchmarkingGPU = false;
+	}
+	
+	public static void printOutGPUBenchmarkResults() {
+		int number = allResults.get(0).size();
+		
+		String sep = number + ", ";
+		for(int n=0;n<number;n++) {
+			System.err.print(sep + "total, initialization, marshaling, upload - marshalling, execution, download, unmarshaling, other");
+			sep = ", ";
+		}
+		System.err.println();
+		
+		for(ArrayList<GPUResult> a : allResults) {
+			sep = ", ";
+			
+			for(GPUResult r : a) {
+				System.err.print(sep);
+				if(r.numberOfRuns > 0) {
+					System.err.print(r.totalTime / r.numberOfRuns);
+					System.err.print(", ");
+					System.err.print(r.initilizationTime / r.numberOfRuns);
+					System.err.print(", ");
+					System.err.print(r.marshallingTime / r.numberOfRuns);
+					System.err.print(", ");
+					System.err.print((r.uploadAndMarshallingTime - r.marshallingTime) / r.numberOfRuns);
+					System.err.print(", ");
+					System.err.print(r.computeTime / r.numberOfRuns);
+					System.err.print(", ");
+					System.err.print(r.downloadTime / r.numberOfRuns);
+					System.err.print(", ");
+					System.err.print(r.unmarshallingTime / r.numberOfRuns);
+					System.err.print(", ");
+					System.err.print((r.totalTime - r.initilizationTime - r.uploadAndMarshallingTime - r.computeTime - r.downloadTime - r.unmarshallingTime) / r.numberOfRuns);
+				}
+				else {
+					System.err.print("NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN");
+				}
+				
+				sep = ", ";
+			}
+			System.err.println();
+		}
+	}
+	
 	public static WyList executeWYGPUKernelOverRange(String moduleName, BigInteger kernelID, WyList arguments, BigInteger start, BigInteger end) {
 		return executeWYGPUKernelOverRange(moduleName, kernelID.intValue(), arguments, start.intValue(), end.intValue());
 	}
 
 	public static WyList executeWYGPUKernelOverRange(String moduleName, int kernelID, WyList arguments, int start, int end) {
+		long functionStartTime = benchmarkingGPU ? System.nanoTime() : 0;
+		
 		if(start == end) {
 			return arguments;
 		}
@@ -114,6 +184,8 @@ public class Util$native {
 					throw e;
 				}
 			}
+			
+			long uploadStartTime = benchmarkingGPU ? System.nanoTime() : 0;
 
 			// ------------------------ Begin computation
 			// -------------------------
@@ -137,7 +209,13 @@ public class Util$native {
 				}
 				argumentCount++;
 			}
-						
+			
+			long marshallingEndTime = benchmarkingGPU ? System.nanoTime() : 0;
+			
+			writeEvents.waitForEvents();
+			
+			long computeStartTime = benchmarkingGPU ? System.nanoTime() : 0;
+			
 			Event computeEvent = new Event();
 			try {
 				k.enqueueKernelWithWorkSizes(q, 1, new long[] { start }, new long[] { end }, null, writeEvents, computeEvent);
@@ -151,6 +229,10 @@ public class Util$native {
 					throw e;
 				}
 			}
+			
+			computeEvent.waitForEvent();
+			
+			long computeEndTime = benchmarkingGPU ? System.nanoTime() : 0;
 
 			EventList readEvents = new EventList();
 			HashSet<Runnable> onCompletions = new HashSet<Runnable>();
@@ -161,10 +243,14 @@ public class Util$native {
 			}
 
 			readEvents.waitForEvents();
-
+			
+			long downloadEndTime = benchmarkingGPU ? System.nanoTime() : 0;
+			
 			for (Runnable r : onCompletions) {
 				r.run();
 			}
+			
+			long unmarshallingEndTime = benchmarkingGPU ? System.nanoTime() : 0;
 
 			// ------------------------ End computation
 			// -------------------------
@@ -180,7 +266,22 @@ public class Util$native {
 			p.release();
 			q.release();
 			c.release();
-
+			
+			if(benchmarkingGPU) {
+				GPUResult r = new GPUResult();
+				
+				r.totalTime += (System.nanoTime() - functionStartTime);
+				r.initilizationTime += (uploadStartTime - functionStartTime);
+				r.marshallingTime += (marshallingEndTime - uploadStartTime);
+				r.uploadAndMarshallingTime += (computeStartTime - uploadStartTime);
+				r.computeTime += (computeEndTime - computeStartTime);
+				r.downloadTime += (downloadEndTime - computeEndTime);
+				r.unmarshallingTime += (unmarshallingEndTime - downloadEndTime);
+				r.numberOfRuns++;
+				
+				currentResult.add(r);
+			}
+			
 			return resultArray;
 		} catch (DeviceFetchException e) {
 			throw new RuntimeException(e);
