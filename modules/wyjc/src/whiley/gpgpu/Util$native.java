@@ -81,6 +81,8 @@ public class Util$native {
 	}
 	
 	private static class GPUResult {
+		public long otherTime = 0;
+		public long uploadMinusMarshallingTime = 0;
 		public long totalTime = 0;
 		public long initilizationTime = 0;
 		public long marshallingTime = 0;
@@ -116,36 +118,111 @@ public class Util$native {
 		}
 		System.err.println();
 		
+		GPUResult columnAverages[] = new GPUResult[number];
+		for(int n=0;n<number;n++) {
+			columnAverages[n] = new GPUResult();
+		}
+		GPUResult overallAverages = new GPUResult();
+		
 		for(ArrayList<GPUResult> a : allResults) {
 			sep = ", ";
 			
-			for(GPUResult r : a) {
+			for(int n=0;n<number;n++) {
+				GPUResult r = a.get(n);
+				
 				System.err.print(sep);
-				if(r.numberOfRuns > 0) {
-					System.err.print(r.totalTime / r.numberOfRuns);
-					System.err.print(", ");
-					System.err.print(r.initilizationTime / r.numberOfRuns);
-					System.err.print(", ");
-					System.err.print(r.marshallingTime / r.numberOfRuns);
-					System.err.print(", ");
-					System.err.print((r.uploadAndMarshallingTime - r.marshallingTime) / r.numberOfRuns);
-					System.err.print(", ");
-					System.err.print(r.computeTime / r.numberOfRuns);
-					System.err.print(", ");
-					System.err.print(r.downloadTime / r.numberOfRuns);
-					System.err.print(", ");
-					System.err.print(r.unmarshallingTime / r.numberOfRuns);
-					System.err.print(", ");
-					System.err.print((r.totalTime - r.initilizationTime - r.uploadAndMarshallingTime - r.computeTime - r.downloadTime - r.unmarshallingTime) / r.numberOfRuns);
-				}
-				else {
-					System.err.print("NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN");
-				}
+				
+				long totalTime = (r.totalTime / r.numberOfRuns);
+				long initilizationTime = (r.initilizationTime / r.numberOfRuns);
+				long marshallingTime = (r.marshallingTime / r.numberOfRuns);
+				long uploadMinusMarshallingTime = ((r.uploadAndMarshallingTime - r.marshallingTime) / r.numberOfRuns);
+				long computeTime = (r.computeTime / r.numberOfRuns);
+				long downloadTime = (r.downloadTime / r.numberOfRuns);
+				long unmarshallingTime = (r.unmarshallingTime / r.numberOfRuns);
+				long otherTime = ((r.totalTime - r.initilizationTime - r.uploadAndMarshallingTime - r.computeTime - r.downloadTime - r.unmarshallingTime) / r.numberOfRuns);
+				
+				columnAverages[n].totalTime += totalTime;
+				columnAverages[n].initilizationTime += initilizationTime;
+				columnAverages[n].marshallingTime += marshallingTime;
+				columnAverages[n].uploadMinusMarshallingTime += uploadMinusMarshallingTime;
+				columnAverages[n].computeTime += computeTime;
+				columnAverages[n].downloadTime += downloadTime;
+				columnAverages[n].unmarshallingTime += unmarshallingTime;
+				columnAverages[n].otherTime += otherTime;
+				
+				overallAverages.totalTime += totalTime;
+				overallAverages.initilizationTime += initilizationTime;
+				overallAverages.marshallingTime += marshallingTime;
+				overallAverages.uploadMinusMarshallingTime += uploadMinusMarshallingTime;
+				overallAverages.computeTime += computeTime;
+				overallAverages.downloadTime += downloadTime;
+				overallAverages.unmarshallingTime += unmarshallingTime;
+				overallAverages.otherTime += otherTime;
+				
+				System.err.print(totalTime);
+				System.err.print(", ");
+				System.err.print(initilizationTime);
+				System.err.print(", ");
+				System.err.print(marshallingTime);
+				System.err.print(", ");
+				System.err.print(uploadMinusMarshallingTime);
+				System.err.print(", ");
+				System.err.print(computeTime);
+				System.err.print(", ");
+				System.err.print(downloadTime);
+				System.err.print(", ");
+				System.err.print(unmarshallingTime);
+				System.err.print(", ");
+				System.err.print(otherTime);
 				
 				sep = ", ";
 			}
 			System.err.println();
 		}
+		
+		System.err.println();
+		
+		System.err.print("Column averages:");
+		for(int n=0;n<number;n++) {
+			System.err.print(", ");
+			System.err.print(columnAverages[n].totalTime / allResults.size());
+			System.err.print(", ");
+			System.err.print(columnAverages[n].initilizationTime / allResults.size());
+			System.err.print(", ");
+			System.err.print(columnAverages[n].marshallingTime / allResults.size());
+			System.err.print(", ");
+			System.err.print(columnAverages[n].uploadMinusMarshallingTime / allResults.size());
+			System.err.print(", ");
+			System.err.print(columnAverages[n].computeTime / allResults.size());
+			System.err.print(", ");
+			System.err.print(columnAverages[n].downloadTime / allResults.size());
+			System.err.print(", ");
+			System.err.print(columnAverages[n].unmarshallingTime / allResults.size());
+			System.err.print(", ");
+			System.err.print(columnAverages[n].otherTime / allResults.size());
+		}
+		
+		System.err.println();
+		System.err.println();
+		
+		
+		System.err.print("Overall averages:");
+		System.err.print(", ");
+		System.err.print(overallAverages.totalTime / allResults.size() / number);
+		System.err.print(", ");
+		System.err.print(overallAverages.initilizationTime / allResults.size() / number);
+		System.err.print(", ");
+		System.err.print(overallAverages.marshallingTime / allResults.size() / number);
+		System.err.print(", ");
+		System.err.print(overallAverages.uploadMinusMarshallingTime / allResults.size() / number);
+		System.err.print(", ");
+		System.err.print(overallAverages.computeTime / allResults.size() / number);
+		System.err.print(", ");
+		System.err.print(overallAverages.downloadTime / allResults.size() / number);
+		System.err.print(", ");
+		System.err.print(overallAverages.unmarshallingTime / allResults.size() / number);
+		System.err.print(", ");
+		System.err.print(overallAverages.otherTime / allResults.size() / number);
 	}
 	
 	public static WyList executeWYGPUKernelOverRange(String moduleName, BigInteger kernelID, WyList arguments, BigInteger start, BigInteger end) {
@@ -160,7 +237,7 @@ public class Util$native {
 		}
 				
 		try {
-			DeviceList devices = DeviceList.devicesOfType(DeviceType.GPU, 1);
+			DeviceList devices = DeviceList.devicesOfType(DeviceType.CPU, 1);
 			if (devices.count() < 1) {
 				System.err.println("Unable to find a device");
 				System.exit(1);

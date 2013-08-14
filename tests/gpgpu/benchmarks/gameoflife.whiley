@@ -51,27 +51,29 @@ public void ::main(System.Console sys):
 
 		count = 0
 		while count < 3:
-			for x in 0..size:
-				for y in 0..size:
-					live = 0
-					for adjx in -1..2:
-						for adjy in -1..2:
-							if !((x + adjx) < 0 || (x + adjx) >= size || (y + adjy) < 0 || (y + adjy) >= size):
-								live = live + data1[(y + adjy) * size + (x + adjx)]
+			for index in 0..(size * size):
+				y = index / size
+				x = index % size
+				
+				live = 0
+				for adjx in -1..2:
+					for adjy in -1..2:
+						if !((x + adjx) < 0 || (x + adjx) >= size || (y + adjy) < 0 || (y + adjy) >= size):
+							live = live + data1[(y + adjy) * size + (x + adjx)]
 
-					this = data1[y * size + x]
+				this = data1[y * size + x]
 
-					if this == 1:
-						live = live - 1
-						if live < 2 || live > 3:
-							data2[y * size + x] = 0
-						else:
-							data2[y * size + x] = 1
+				if this == 1:
+					live = live - 1
+					if live < 2 || live > 3:
+						data2[y * size + x] = 0
 					else:
-						if live == 3:
-							data2[y * size + x] = 1
-						else:
-							data2[y * size + x] = 0
+						data2[y * size + x] = 1
+				else:
+					if live == 3:
+						data2[y * size + x] = 1
+					else:
+						data2[y * size + x] = 0
 
 			temp = data1
 			data1 = data2

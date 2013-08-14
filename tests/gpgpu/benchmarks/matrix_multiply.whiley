@@ -11,9 +11,6 @@ public Matrix newMatrix(int start, int mod, int w, int h):
 		num = (num + 1) % mod
 	return {w: w, h:h, data:data}
 
-public int index(int w, int x, int y):
-	return x + y * w
-
 public Matrix multiplyMatrix(Matrix one, Matrix two):
 	assert one.w == two.h && one.h == two.w
 
@@ -28,30 +25,32 @@ public Matrix multiplyMatrix(Matrix one, Matrix two):
 	twoData = two.data
 	data = ret.data
 
-	for i in 0..w:
-		for j in 0..h:
-			result = 0
+	for index in 0..(w * h):
+		j = index / w
+		i = index % w
 
-			for n in 0..w:
-				result = result + oneData[index(w1, n, j)] * twoData[index(w2, i, n)]
+		result = 0
 
-			data[index(w, i, j)] = result
+		for n in 0..w:
+			result = result + oneData[j * w1 + n] * twoData[n * w2 + i]
+
+		data[j * w + i] = result
 
 	ret.data = data
 
 	return ret
 
 public void ::printMatrix(System.Console sys, Matrix m):
-//	for y in 0..m.h:
-//		sep = ""
-//		for x in 0..m.w:
-//			sys.out.print(sep + m.data[index(m.w, x, y)])
-//			sep = ", "
-//		sys.out.println("")
+	for y in 0..m.h:
+		sep = ""
+		for x in 0..m.w:
+			sys.out.print(sep + m.data[y * m.w + x])
+			sep = ", "
+		sys.out.println("")
 	sys.out.println(m.h)
 
 public void ::main(System.Console sys):
-	size = 100
+	size = 300
 	matrix1 = newMatrix(0,100,size,size)
 	matrix2 = newMatrix(20,100,size,size)
 
