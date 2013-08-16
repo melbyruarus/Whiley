@@ -64,6 +64,8 @@ import wyjc.runtime.WyRat;
 import wyjc.runtime.WyTuple;
 
 public class Util$native {
+	private static final String WHILEY_GPGPU_FORCE_CPU = "WHILEY_GPGPU_FORCE_CPU";
+	
 	private static class GPUReferenceArgument {
 		public Buffer buffer;
 		public Object whileyObject;
@@ -237,7 +239,7 @@ public class Util$native {
 		}
 				
 		try {
-			DeviceList devices = DeviceList.devicesOfType(DeviceType.CPU, 1);
+			DeviceList devices = DeviceList.devicesOfType("YES".equals(System.getenv(WHILEY_GPGPU_FORCE_CPU))?DeviceType.CPU:DeviceType.GPU, 1);
 			if (devices.count() < 1) {
 				System.err.println("Unable to find a device");
 				System.exit(1);
