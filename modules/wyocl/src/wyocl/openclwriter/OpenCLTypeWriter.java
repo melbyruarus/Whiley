@@ -91,7 +91,7 @@ public class OpenCLTypeWriter {
 			
 			boilerPlateWriter.println("// Begin register "+register+" list unpacking");
 			boilerPlateWriter.println("int "+variableName(register, type)+SIZE_SUFFIX+" = "+variableName(register, type)+"?((__global int *)"+variableName(register, type)+")[0]:0;");
-			boilerPlateWriter.println(variableName(register, type)+" = (__global "+primitiveType((Type.Leaf)type.element())+" *)(((int *)"+variableName(register, type)+") + 1);");
+			boilerPlateWriter.println(variableName(register, type)+" = (__global "+primitiveType((Type.Leaf)type.element())+" *)(((__global int *)"+variableName(register, type)+") + 1);");
 			boilerPlateWriter.println("// End register "+register+" list unpacking");
 		}
 		
