@@ -30,8 +30,10 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 
 import org.jocl.CL;
 import org.jocl.Pointer;
@@ -65,6 +67,7 @@ import wyjc.runtime.WyTuple;
 
 public class Util$native {
 	private static final String WHILEY_GPGPU_FORCE_CPU = "WHILEY_GPGPU_FORCE_CPU";
+	private static final Map<String, Cached> cachedKernels = new HashMap<String, Cached>();
 	
 	private static class GPUReferenceArgument {
 		public Buffer buffer;
@@ -79,6 +82,18 @@ public class Util$native {
 			if (buffer != null) {
 				buffer.release();
 			}
+		}
+	}
+	
+	private static class Cached {
+		public final Kernel k;
+		public final CommandQueue q;
+		public final ByteOrder byteOrder;
+		
+		public Cached(Kernel k, CommandQueue q, ByteOrder byteOrder) {
+			this.k = k;
+			this.q = q;
+			this.byteOrder = byteOrder;
 		}
 	}
 	
@@ -239,29 +254,37 @@ public class Util$native {
 		}
 				
 		try {
-			DeviceList devices = DeviceList.devicesOfType("YES".equals(System.getenv(WHILEY_GPGPU_FORCE_CPU))?DeviceType.CPU:DeviceType.GPU, 1);
-			if (devices.count() < 1) {
-				System.err.println("Unable to find a device");
-				System.exit(1);
-			}
+			String kernelName = "whiley_gpgpu_func_"+kernelID;
+			Cached cached = cachedKernels.get(kernelName);
+			
+			if(cached == null) {
+				DeviceList devices = DeviceList.devicesOfType("YES".equals(System.getenv(WHILEY_GPGPU_FORCE_CPU))?DeviceType.CPU:DeviceType.GPU, 1);
+				if (devices.count() < 1) {
+					System.err.println("Unable to find a device");
+					System.exit(1);
+				}
 
-			Device device = devices.get(0);
-			ByteOrder byteOrder = device.isLittleEndian() ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
-			Context c = new Context(devices);
-			CommandQueue q = new CommandQueue(c, device);
-			Program p = new Program(c);
-			p.loadSource(new String[] { Utils.fileAsString(moduleName+".cl") });
-			p.compileForDevices(devices);
-			Kernel k;
-			try {
-				k = new Kernel(p, "whiley_gpgpu_func_"+kernelID);
-			} catch (KernelInitilizationException e) {
-				if(e.status == CL.CL_INVALID_KERNEL_NAME) {
-					throw new IllegalArgumentException("There does not exist a kernel named whiley_gpgpu_func_"+kernelID+" in module "+moduleName, e);
+				Device device = devices.get(0);
+				ByteOrder byteOrder = device.isLittleEndian() ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
+				Context c = new Context(devices);
+				CommandQueue q = new CommandQueue(c, device);
+				Program p = new Program(c);
+				p.loadSource(new String[] { Utils.fileAsString(moduleName+".cl") });
+				p.compileForDevices(devices);
+				Kernel k;
+				try {
+					k = new Kernel(p, kernelName);
+				} catch (KernelInitilizationException e) {
+					if(e.status == CL.CL_INVALID_KERNEL_NAME) {
+						throw new IllegalArgumentException("There does not exist a kernel named whiley_gpgpu_func_"+kernelID+" in module "+moduleName, e);
+					}
+					else {
+						throw e;
+					}
 				}
-				else {
-					throw e;
-				}
+				
+				cached = new Cached(k, q, byteOrder);
+				cachedKernels.put(kernelName, cached);
 			}
 			
 			long uploadStartTime = benchmarkingGPU ? System.nanoTime() : 0;
@@ -276,7 +299,7 @@ public class Util$native {
 			// Setup all the arguments
 			for (Object item : arguments) {
 				try {
-					setArgument(argumentCount, k, q, item, memoryArguments, null, writeEvents, byteOrder);
+					setArgument(argumentCount, cached.k, cached.q, item, memoryArguments, null, writeEvents, cached.byteOrder);
 				} catch (KernelArgumentException e) {
 					if(e.status == CL.CL_INVALID_ARG_INDEX) {
 						System.err.println("Wrong arguments to kernel: " + arguments);
@@ -297,7 +320,7 @@ public class Util$native {
 			
 			Event computeEvent = new Event();
 			try {
-				k.enqueueKernelWithWorkSizes(q, 1, new long[] { start }, new long[] { end }, null, writeEvents, computeEvent);
+				cached.k.enqueueKernelWithWorkSizes(cached.q, 1, new long[] { start }, new long[] { end }, null, writeEvents, computeEvent);
 			}
 			catch(KernelExecutionException e) {
 				if(e.status == CL.CL_INVALID_KERNEL_ARGS) {
@@ -317,7 +340,7 @@ public class Util$native {
 			HashSet<Runnable> onCompletions = new HashSet<Runnable>();
 			WyList resultArray = new WyList();
 			for (GPUReferenceArgument item : memoryArguments) {
-				getArgument(q, item, computeEvent, readEvents, onCompletions, byteOrder, resultArray);
+				getArgument(cached.q, item, computeEvent, readEvents, onCompletions, cached.byteOrder, resultArray);
 				argumentCount++;
 			}
 
@@ -341,10 +364,6 @@ public class Util$native {
 			for (GPUReferenceArgument releasable : memoryArguments) {
 				releasable.releaseOpenCLObject();
 			}
-
-			p.release();
-			q.release();
-			c.release();
 			
 			if(benchmarkingGPU) {
 				GPUResult r = new GPUResult();
