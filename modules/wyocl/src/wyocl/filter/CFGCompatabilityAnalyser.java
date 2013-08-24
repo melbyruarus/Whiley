@@ -439,7 +439,7 @@ public class CFGCompatabilityAnalyser {
 						if(n.cause instanceof Bytecode.Load) {
 							Bytecode.Load l = (Bytecode.Load)n.cause;
 							
-							if(l.getType() instanceof Type.List) {
+							if(l.getType() instanceof Type.List && SupportedTypes.includes((Type)l.getType())) {
 								elementTypesAndSize.put(l.getLeftOperand(), getMultidimensionalListInfo((Type)l.getType(), 0));
 							}
 						}
@@ -462,7 +462,7 @@ public class CFGCompatabilityAnalyser {
 								if(b instanceof Bytecode.Update) {
 									Bytecode.Update u = (Bytecode.Update)b;
 									
-									if(u.getDataStructureBeforeType() instanceof Type.List) {
+									if(u.getDataStructureBeforeType() instanceof Type.List && SupportedTypes.includes(u.getDataStructureBeforeType())) {
 										boolean failed = false;
 										
 										List<Integer> requiredIndexes = requiredArrayIndexes.get(u.getTarget());
@@ -550,7 +550,7 @@ public class CFGCompatabilityAnalyser {
 								if(b instanceof Bytecode.Load) {
 									Bytecode.Load l = (Bytecode.Load)b;
 									
-									if(l.getType() instanceof Type.List) {										
+									if(l.getType() instanceof Type.List && SupportedTypes.includes((Type)l.getType())) {										
 										// Ok so we now know that we are indexing into a list, just need to find out what the index is
 										
 										List<Integer> requiredIndexes = requiredArrayIndexes.get(l.getLeftOperand());
