@@ -404,6 +404,11 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 				n.next = null;
 			}
 		}
+		
+		@Override
+		public String toString() {
+			return super.toString() + " " + causialLoopBytecode;
+		}
 	}
 
 	public static class ForAllLoopNode extends CFGNode.LoopNode implements GPUSupportedNode {
@@ -1073,6 +1078,11 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			conditionMet.previous.remove(this);
 			conditionMet = null;
 			conditionUnmet = null;
+		}
+		
+		@Override
+		public String toString() {
+			return super.toString() + " " + conditionalJump.toString(); 
 		}
 	}
 

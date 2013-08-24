@@ -83,12 +83,13 @@ public class LoopFilter {
 			rootNode = CFGOptimizer.processBeforeAnalysis(rootNode, methodArgumentsDFGNodes);
 			
 			List<CFGIterator.Entry> sortedCFG = CFGIterator.createNestedRepresentation(rootNode);
-			final LoopAnalyserResult prelimAnalyserResult = CFGCompatabilityAnalyser.analyse(rootNode, sortedCFG, functionCompatabilities);
+			final LoopAnalyserResult prelimAnalyserResult = CFGCompatabilityAnalyser.analyse(rootNode, sortedCFG, functionCompatabilities, false, null);
 			
 			rootNode = CFGOptimizer.processAfterAnalysis(rootNode, prelimAnalyserResult, methodArgumentsDFGNodes);
 			
 			sortedCFG = CFGIterator.createNestedRepresentation(rootNode);
-			final LoopAnalyserResult analyserResult = CFGCompatabilityAnalyser.analyse(rootNode, sortedCFG, functionCompatabilities);
+
+			final LoopAnalyserResult analyserResult = CFGCompatabilityAnalyser.analyse(rootNode, sortedCFG, functionCompatabilities, true, prelimAnalyserResult);
 			if(!analyserResult.anyLoopsCompatable) {
 				return createBlock(analyserResult, finalkernels, rootNode, blk);
 			}

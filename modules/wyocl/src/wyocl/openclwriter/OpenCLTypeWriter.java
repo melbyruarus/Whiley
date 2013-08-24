@@ -80,7 +80,7 @@ public class OpenCLTypeWriter {
 			writer.print("__global ");
 			// TODO: check for composite types
 			if(!(type.element() instanceof Type.Leaf)) {
-				throw new RuntimeException("Currently only support lists of primitive types, don't support: "+type);
+				throw new RuntimeException("Currently only support lists of primitive types, don't support: "+type + " ("+register+")");
 			}
 			writer.print(primitiveType((Type.Leaf)type.element()));
 			writer.print(" *"+variableName(register, type));
@@ -134,7 +134,7 @@ public class OpenCLTypeWriter {
 			writer.print("__global ");
 			// TODO: check for composite types
 			if(!(type.element(0) instanceof Type.Leaf)) {
-				throw new RuntimeException("Currently only support tuples of primitive types, don't support: "+type);
+				throw new RuntimeException("Currently only support tuples of primitive types, don't support: "+type + " ("+register+")");
 			}
 			writer.print(primitiveType((Type.Leaf)type.element(0)));
 			writer.print(" *"+variableName(register, type));

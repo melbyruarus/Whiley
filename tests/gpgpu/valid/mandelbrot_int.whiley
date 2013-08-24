@@ -1,12 +1,22 @@
 import * from whiley.lang.*
 
-public void ::printHash([int] data, real start, System.Console sys):
+public [[int]] createGrid(int w, int h):
+	grid = []
+	for y in 0..h:
+		row = []
+		for x in 0..w:
+			row = row + [0]
+
+		grid = grid + [row]
+
+	return grid
+
+public void ::printHash(int size, [[int]] data, real start, System.Console sys):
 	if Time.current() - start < 0.5:
 		hash = 0
-		count = 0
-		while count < |data|:
-			hash = hash + data[count]
-			count = count + 1
+		for y in 0..size:
+			for x in 0..size:
+				hash = hash + data[y][x]
 
 		sys.out.println(hash)
 	else:
@@ -14,7 +24,7 @@ public void ::printHash([int] data, real start, System.Console sys):
 
 public void ::main(System.Console sys):
 	size = 100
-	data = 0..(size * size)
+	data = createGrid(size, size)
 
 	start = Time.current()
 
@@ -34,9 +44,9 @@ public void ::main(System.Console sys):
 				x0 = xtmp
 				iteration = iteration + 1
 			
-			data[y*size+x] = iteration
+			data[y][x] = iteration
 
-	printHash(data, start, sys)
+	printHash(size, data, start, sys)
 
 public int fakeFloat(int num, int den):
 	return (10000 * num) / den

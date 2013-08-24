@@ -735,4 +735,102 @@ public class Util$native {
 			throw new RuntimeException("Non marshabale type encountered: " + type);
 		}
 	}
+	
+	
+	
+	// public native ([any], [int]) flattenMultidimensionalArray([any] multiDArray, int numberOfDimensions):
+	@SuppressWarnings("unchecked")
+	public static WyTuple flattenMultidimensionalArray(WyList multiDArray, BigInteger numberOfDimensionsBig) {
+		int numberOfDimensions = numberOfDimensionsBig.intValue();
+				
+		WyList dimensions = new WyList(numberOfDimensions);
+		for(int i=0;i<numberOfDimensions;i++) {
+			dimensions.add(0);
+		}
+		recursivlyDetermineDimensions(multiDArray, 0, numberOfDimensions, dimensions);
+
+		System.err.println(dimensions);
+		
+		int totalSize = 1;
+		for(Object o : dimensions) {
+			totalSize *= (Integer)o;
+		}
+		
+		WyList outlist = new WyList(totalSize);
+		while(outlist.size() < totalSize) { outlist.add(null); } // Will have to have support in the runtime
+		
+		recursivlyCopyFlatArray(multiDArray, outlist, 0, numberOfDimensions, dimensions, 0);
+		
+		for(int i=0;i<numberOfDimensions;i++) {
+			dimensions.set(i, BigInteger.valueOf((Integer)dimensions.get(i)));
+		}
+		
+		WyTuple result = new WyTuple(2);
+		result.add(outlist);
+		result.add(dimensions);
+		
+		return result;
+	}
+	
+	@SuppressWarnings("unchecked")
+	private static void recursivlyCopyFlatArray(WyList array, WyList flattened, int depth, int numberOfDimensions, WyList dimensions, int currentIndex) {
+		int ourIndex = currentIndex * (Integer)dimensions.get(depth);
+		
+		if(depth+1 < numberOfDimensions) {
+			for(Object o : array) {
+				recursivlyCopyFlatArray((WyList)o, flattened, depth+1, numberOfDimensions, dimensions, ourIndex);
+				ourIndex++;
+			}
+		}
+		else {
+			for(Object o : array) {
+				flattened.set(ourIndex, o);
+				ourIndex++;
+			}
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void recursivlyDetermineDimensions(WyList array, int depth, int numberOfDimensions, WyList dimensions) {
+		dimensions.set(depth, Math.max((Integer)dimensions.get(depth), array.size()));
+		
+		if(depth+1 < numberOfDimensions) {
+			for(Object o : array) {
+				recursivlyDetermineDimensions((WyList)o, depth+1, numberOfDimensions, dimensions);
+			}
+		}
+	}
+
+	// public native [any] unflattenMultidimensionalArray([any] flatArray, [any] multiDArray, int numberOfDimensions, [int] sizeOfEachDimension):
+	public static WyList unflattenMultidimensionalArray(WyList flatArray, WyList multiDArray, BigInteger numberOfDimensionsBig, WyList sizeOfEachDimension) {
+		int numberOfDimensions = numberOfDimensionsBig.intValue();
+		
+		List<Integer> dimensions = new ArrayList<Integer>();
+		
+		for(Object o : sizeOfEachDimension) {
+			dimensions.add(((BigInteger)o).intValue());
+		}
+		
+		recursivlyCopyUnflatArray(multiDArray, flatArray, 0, numberOfDimensions, dimensions, 0);
+		
+		return multiDArray;
+	}
+	
+	@SuppressWarnings("unchecked")
+	private static void recursivlyCopyUnflatArray(WyList array, WyList flattened, int depth, int numberOfDimensions, List<Integer> dimensions, int currentIndex) {
+		int ourIndex = currentIndex * dimensions.get(depth);
+		
+		if(depth+1 < numberOfDimensions) {
+			for(Object o : array) {
+				recursivlyCopyUnflatArray((WyList)o, flattened, depth+1, numberOfDimensions, dimensions, ourIndex);
+				ourIndex++;
+			}
+		}
+		else {
+			for(int i=0;i<array.size();i++) {
+				array.set(i, flattened.get(ourIndex));
+				ourIndex++;
+			}
+		}
+	}
 }

@@ -76,7 +76,7 @@ public class CFGIterator {
 	 * @param two
 	 * @return Whether node occurs on a path between one and two
 	 */
-	public static boolean doesNodeDependUpon(final CFGNode node, CFGNode one, final CFGNode two) {
+	public static boolean doesNodeDependUpon(final CFGNode node, final CFGNode one, final CFGNode two) {
 		final boolean inBetween[] = new boolean[1];
 		inBetween[0] = false;
 		
@@ -172,6 +172,12 @@ public class CFGIterator {
 
 	public static Set<CFGNode> getRoots(CFGNode node) {
 		Set<CFGNode> previous = new HashSet<CFGNode>(node.previous);
+		
+		if(previous.isEmpty()) {
+			previous.add(node);
+			return previous;
+		}
+		
 		while(true) {
 			Set<CFGNode> fringe = new HashSet<CFGNode>();
 			boolean more = false;

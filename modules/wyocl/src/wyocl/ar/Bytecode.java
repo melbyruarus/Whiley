@@ -28,11 +28,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 	public String getDFGNodeSummaryString() {
 		String ret = "written: ";
 		for(DFGNode n : writtenDFGNodes.values()) {
-			ret += n.getSummary() + " ";
+			ret += n.getSummary() + " " + ((n.cause==null)?"!!!!!!!!!!!!!!!!!":"");
 		}
 		ret += "read: ";
 		for(DFGNode n : readDFGNodes.values()) {
-			ret += n.getSummary() + " ";
+			ret += n.getSummary() + " " + ((n.cause==null)?"!!!!!!!!!!!!!!!!!":"");
 		}
 		return ret;
 	}
@@ -43,6 +43,11 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 	
 	public Code getWYILLangBytecode() {
 		return wyilLangCode;
+	}
+	
+	@Override
+	public String toString() {
+		return (cfgNode==null?"===== diconnected =====":"") + super.toString() + " " + getCodeString();
 	}
 	
 	/**
@@ -359,7 +364,7 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 		
 		@Override
 		protected void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters) {
-			writtenRegisters.add(new Pair<Integer, Type>(code.target, (Type)code.type));
+			writtenRegisters.add(new Pair<Integer, Type>(code.target, Type.T_INT));
 			readRegisters.add(code.operand);
 		}
 		

@@ -10,7 +10,7 @@ public class SupportedTypes {
 		if(type instanceof Type.Leaf) {
 			return true;
 		}
-		if(type instanceof EffectiveList && ((EffectiveList) type).element() instanceof Type.Leaf) {
+		if(isSupportedList(type, 1)) {
 			return true;
 		}
 		else if(type instanceof EffectiveTuple) {
@@ -27,5 +27,13 @@ public class SupportedTypes {
 		else {
 			return false;
 		}
+	}
+
+	private static boolean isSupportedList(Type type, int recursionDepth) {
+		if(recursionDepth > 3) {
+			return false;
+		}
+		
+		return type instanceof EffectiveList && (((EffectiveList) type).element() instanceof Type.Leaf || isSupportedList(((EffectiveList) type).element(), recursionDepth + 1));
 	}
 }

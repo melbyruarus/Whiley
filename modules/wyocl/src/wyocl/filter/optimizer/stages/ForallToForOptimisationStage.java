@@ -119,8 +119,12 @@ public class ForallToForOptimisationStage {
 				throw new InternalError("Bytecode not contained in bytecode.cfgNode.body.instructions");
 			}
 
-			bytecodes.add(index, new Bytecode.Assign(Code.Assign(indexType, lowerRegister, bytecode.getLeftOperand())));
-			bytecodes.add(index, new Bytecode.Assign(Code.Assign(indexType, upperRegister, bytecode.getRightOperand())));
+			Bytecode lower = new Bytecode.Assign(Code.Assign(indexType, lowerRegister, bytecode.getLeftOperand()));
+			lower.cfgNode = bytecode.cfgNode;
+			Bytecode upper = new Bytecode.Assign(Code.Assign(indexType, upperRegister, bytecode.getRightOperand()));
+			upper.cfgNode = bytecode.cfgNode;
+			bytecodes.add(index, lower);
+			bytecodes.add(index, upper);
 		}
 
 		CFGNode.ForLoopNode forLoop = new CFGNode.ForLoopNode(loop.getBytecode().getIndexRegister(),
@@ -139,16 +143,22 @@ public class ForallToForOptimisationStage {
 		int listRegister = DFGIterator.maxUsedRegister(loop) + 1;
 
 		CFGNode.VanillaCFGNode newVanillaNode = new CFGNode.VanillaCFGNode();
-		newVanillaNode.body.instructions.add(new Bytecode.Binary(Code.BinArithOp(Type.List(loop.getIndexType(), false), listRegister, loop.getStartRegister(), loop.getEndRegister(), BinArithKind.RANGE)));
+		
+		Bytecode createRange = new Bytecode.Binary(Code.BinArithOp(Type.List(loop.getIndexType(), false), listRegister, loop.getStartRegister(), loop.getEndRegister(), BinArithKind.RANGE));
+		createRange.cfgNode = newVanillaNode;
+		newVanillaNode.body.instructions.add(createRange);
 
-		CFGNode.ForAllLoopNode forLoop = new CFGNode.ForAllLoopNode(new Bytecode.ForAll(Code.ForAll(Type.List(indexType, false),
-																		listRegister,
-																		loop.getIndexRegister(),
-																		((Code.Loop)loop.getCausialWYILLangBytecode()).modifiedOperands,
-																		loop.loopEndLabel())),
+		Bytecode.ForAll loopBytecode = new Bytecode.ForAll(Code.ForAll(Type.List(indexType, false),
+															listRegister,
+															loop.getIndexRegister(),
+															((Code.Loop)loop.getCausialWYILLangBytecode()).modifiedOperands,
+															loop.loopEndLabel()));
+		
+		CFGNode.ForAllLoopNode forLoop = new CFGNode.ForAllLoopNode(loopBytecode,
 																	loop.startIndex,
 																	loop.endIndex);
-
+		loopBytecode.cfgNode = forLoop;
+		
 		loop.replaceWith(forLoop);
 		
 		for(CFGNode p : forLoop.previous) {

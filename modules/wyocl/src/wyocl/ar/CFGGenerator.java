@@ -35,7 +35,7 @@ public class CFGGenerator {
 		if(DEBUG) {
 			try {
 				System.err.println("------------ Begin CFG Printing (1/2) ------------");
-				ARPrinter.print(rootNode);
+				ARPrinter.print(rootNode, false);
 				System.err.println("------------- End CFG Printing (1/2) -------------");
 			} catch (NotADAGException e1) {
 				e1.printStackTrace();
@@ -45,7 +45,7 @@ public class CFGGenerator {
 		if(DEBUG) {
 			try {
 				System.err.println("------------ Begin CFG Printing (2/2) ------------");
-				ARPrinter.print(rootNode);
+				ARPrinter.print(rootNode, false);
 				System.err.println("------------- End CFG Printing (2/2) -------------");
 			} catch (NotADAGException e1) {
 				e1.printStackTrace();
@@ -139,7 +139,9 @@ public class CFGGenerator {
 								}
 							}
 							else if(bytecode instanceof Bytecode.ConditionalJump) {
-								CFGNode.ConditionalJumpNode jumpNode = new CFGNode.ConditionalJumpNode((Bytecode.ConditionalJump)bytecode);
+								Bytecode.ConditionalJump conditionalJumpBytecode = (Bytecode.ConditionalJump)bytecode;
+								CFGNode.ConditionalJumpNode jumpNode = new CFGNode.ConditionalJumpNode(conditionalJumpBytecode);
+								bytecode.cfgNode = jumpNode;
 								if(DEBUG) {System.err.println("Creating node "+jumpNode);}
 								Integer conditionMetTarget = labelIndexes.get(jumpNode.conditionMetTarget());
 								if(conditionMetTarget != null) {
@@ -163,13 +165,17 @@ public class CFGGenerator {
 								nextNode = jumpNode;
 							}
 							else if(bytecode instanceof Bytecode.Return) {
-								CFGNode.ReturnNode jumpNode = new CFGNode.ReturnNode((Bytecode.Return)bytecode);
+								Bytecode.Return returnBytecode = (Bytecode.Return)bytecode;
+								CFGNode.ReturnNode jumpNode = new CFGNode.ReturnNode(returnBytecode);
+								returnBytecode.cfgNode = jumpNode;
 								exitPoints.add(jumpNode);
 
 								nextNode = jumpNode;
 							}
 							else if(bytecode instanceof Bytecode.Switch) {
-								CFGNode.MultiConditionalJumpNode jumpNode = new CFGNode.MultiConditionalJumpNode((Bytecode.Switch)bytecode);
+								Bytecode.Switch switchBytecode = (Bytecode.Switch)bytecode;
+								CFGNode.MultiConditionalJumpNode jumpNode = new CFGNode.MultiConditionalJumpNode(switchBytecode);
+								switchBytecode.cfgNode = jumpNode;
 								if(DEBUG) {System.err.println("Creating node "+jumpNode);}
 								for(Pair<Constant, String> branch : jumpNode.getBranchTargets()) {
 									Integer target = labelIndexes.get(branch.second());

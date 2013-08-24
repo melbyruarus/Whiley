@@ -66,6 +66,9 @@ public class Wyil2JavaBuilder extends wyjc.Wyil2JavaBuilder {
 		Block newBlock = loopFilter.processBlock(blk, null, null);
 		if(newBlock != null) {
 			blk = newBlock;
+//			for(Block.Entry e : blk) {
+//				System.err.println(e);
+//			}
 		}
 		super.translate(blk, freeSlot, constants, handlers, lineNumbers, bytecodes);
 	}

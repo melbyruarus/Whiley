@@ -1,5 +1,6 @@
 package wyocl.ar.utils;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -34,6 +35,77 @@ public class DFGIterator {
 			}
 			
 			for(DFGNode next : node.lastModified) {
+				if(!processed.contains(next)) {
+					fringe.add(next);
+				}
+			}
+		}
+	}
+	
+	public static void iterateDFGAlongLastModified(DFGNodeCallback callback, Collection<DFGNode> start, Collection<DFGNode> end) {
+		Set<DFGNode> fringe = new HashSet<DFGNode>();
+		Set<DFGNode> processed = new HashSet<DFGNode>();
+		
+		fringe.addAll(start);
+		processed.addAll(end);
+		
+		while(!fringe.isEmpty()) {
+			DFGNode node = fringe.iterator().next();
+			processed.add(node);
+			fringe.remove(node);
+			
+			if(!callback.process(node)) {
+				return;
+			}
+			
+			for(DFGNode next : node.lastModified) {
+				if(!processed.contains(next)) {
+					fringe.add(next);
+				}
+			}
+		}
+	}
+	
+	public static void iterateDFGAlongLastRead(DFGNodeCallback callback, DFGNode start) {
+		Set<DFGNode> fringe = new HashSet<DFGNode>();
+		Set<DFGNode> processed = new HashSet<DFGNode>();
+		
+		fringe.add(start);
+		
+		while(!fringe.isEmpty()) {
+			DFGNode node = fringe.iterator().next();
+			processed.add(node);
+			fringe.remove(node);
+			
+			if(!callback.process(node)) {
+				return;
+			}
+			
+			for(DFGNode next : node.lastRead) {
+				if(!processed.contains(next)) {
+					fringe.add(next);
+				}
+			}
+		}
+	}
+	
+	public static void iterateDFGAlongLastRead(DFGNodeCallback callback, Collection<DFGNode> start, Collection<DFGNode> end) {
+		Set<DFGNode> fringe = new HashSet<DFGNode>();
+		Set<DFGNode> processed = new HashSet<DFGNode>();
+		
+		fringe.addAll(start);
+		processed.addAll(end);
+		
+		while(!fringe.isEmpty()) {
+			DFGNode node = fringe.iterator().next();
+			processed.add(node);
+			fringe.remove(node);
+			
+			if(!callback.process(node)) {
+				return;
+			}
+			
+			for(DFGNode next : node.lastRead) {
 				if(!processed.contains(next)) {
 					fringe.add(next);
 				}

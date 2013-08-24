@@ -3,10 +3,12 @@ package wyocl.filter.optimizer;
 import java.util.Map;
 
 import wyocl.ar.CFGNode;
+import wyocl.ar.DFGGenerator;
 import wyocl.ar.DFGNode;
 import wyocl.filter.CFGCompatabilityAnalyser.LoopAnalyserResult;
 import wyocl.filter.optimizer.stages.DeadCodeEliminationStage;
 import wyocl.filter.optimizer.stages.ForallToForOptimisationStage;
+import wyocl.filter.optimizer.stages.MultidimensionalLoopFlatteningStage;
 
 public class CFGOptimizer {
 
@@ -15,8 +17,12 @@ public class CFGOptimizer {
 		rootNode.previous.add(dummyNode);
 		
 		ForallToForOptimisationStage.processAfterAnalysis(dummyNode, analyserResult, argumentRegisters);
+		MultidimensionalLoopFlatteningStage.process(dummyNode, analyserResult, argumentRegisters);
 		
-		// FIXME: performConstantPropogation(dummyNode);
+		// TODO: performConstantPropogation(dummyNode);
+		
+		DFGGenerator.clearDFG(dummyNode);
+		DFGGenerator.populateDFG(dummyNode, argumentRegisters);
 		
 		DeadCodeEliminationStage.process(dummyNode, argumentRegisters);
 		
@@ -30,7 +36,10 @@ public class CFGOptimizer {
 		
 		ForallToForOptimisationStage.processBeforeAnalysis(dummyNode, argumentRegisters);
 				
-		// FIXME: performConstantPropogation(dummyNode);
+		// TODO: performConstantPropogation(dummyNode);
+		
+		DFGGenerator.clearDFG(dummyNode);
+		DFGGenerator.populateDFG(dummyNode, argumentRegisters);
 		
 		DeadCodeEliminationStage.process(dummyNode, argumentRegisters);
 		

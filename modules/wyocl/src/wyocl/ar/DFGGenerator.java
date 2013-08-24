@@ -435,6 +435,10 @@ public class DFGGenerator {
 			clearDFGNode(entry.getValue());
 		}
 		
+		for(Map.Entry<Integer, DFGNode> entry : bytecode.writtenDFGNodes.entrySet()) {
+			clearDFGNode(entry.getValue());
+		}
+		
 		bytecode.readDFGNodes.clear();
 		bytecode.writtenDFGNodes.clear();
 	}
