@@ -35,7 +35,7 @@ import wyocl.ar.utils.NotADAGException;
 import wyocl.filter.CFGCompatabilityAnalyser.LoopAnalyserResult;
 import wyocl.filter.LoopType;
 
-public class MultidimensionalLoopFlatteningStage {
+public class MultidimensionalArrayFlatteningStage {
 	private static final boolean DEBUG = false;
 
 	public static void process(final DummyNode dummyNode, final LoopAnalyserResult analyserResult, Map<Integer, DFGNode> argumentRegisters) {

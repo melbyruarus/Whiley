@@ -419,6 +419,8 @@ public class CFGCompatabilityAnalyser {
 					}
 				}
 				
+				boolean passesMultidimensionalListToFunction = false; // TODO: Support this
+				
 				it = read.iterator();
 				while(it.hasNext()) {
 					DFGNode n = it.next();
@@ -443,9 +445,20 @@ public class CFGCompatabilityAnalyser {
 								elementTypesAndSize.put(l.getLeftOperand(), getMultidimensionalListInfo((Type)l.getType(), 0));
 							}
 						}
+						else if(n.cause instanceof Bytecode.Invoke &&
+								n.type instanceof Type.EffectiveList &&
+								!(((Type.EffectiveList)n.type).element() instanceof Type.Leaf)) {
+							passesMultidimensionalListToFunction = true;
+							break;
+						}
 						
 						it.remove();
 					}
+				}
+				
+				if(passesMultidimensionalListToFunction) {
+					loop.dataDependanciesCompatable = false;
+					continue;
 				}
 								
 				if(written.size() > 0) { // We may have a problem
@@ -542,7 +555,7 @@ public class CFGCompatabilityAnalyser {
 								break;
 							}
 						}
-												
+						
 						for(DFGNode dfgNode : read) {
 							if(dfgNode.cause instanceof Bytecode) {
 								Bytecode b = (Bytecode)dfgNode.cause;
