@@ -46,7 +46,7 @@ public void ::main(System.Console sys):
 	image = createRealArray(size * size)
 	blurredImage = createRealArray(size * size)
 
-	for posx in 0..(size * size):
+	for pos in 0..(size * size):
 		posx = pos % size
 		posy = (pos - posx) / size
 
