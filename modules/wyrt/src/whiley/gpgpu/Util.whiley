@@ -27,10 +27,10 @@ package whiley.gpgpu
 
 // The result is (flatArray, sizeOfEachDimension)
 public native ([any], [int]) flattenMultidimensionalArray([any] multiDArray, int numberOfDimensions):
-// Note!!: this method modifies multiDArray by reference
+// Note!!: this method modifies multiDArray by reference, and should only be called by automatically generated code
 public native [any] unflattenMultidimensionalArray([any] flatArray, [any] multiDArray, int numberOfDimensions, [int] sizeOfEachDimension):
 public native [any] executeWYGPUKernelOverArray(string moduleName, int kernelID, [any] arguments, [any] sourceList):
-public native [any] executeWYGPUKernelOverRange(string moduleName, int kernelID, [any] arguments, int start, int end):
+public native [any] executeWYGPUKernelOverRange(string moduleName, int kernelID, [any] arguments, int numberOfDimensions, [int] starts, [int] ends):
 public native void ::beginGPUBenchmarking():
 public native void ::endGPUBenchmarking():
 public native void ::printOutGPUBenchmarkResults():

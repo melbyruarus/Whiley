@@ -305,19 +305,23 @@ public class OpenCLOpWriter {
 		protected void writeForNode(ForLoopNode node) {
 			checkAndAddLabelIfNeeded(node);
 
+			if(node.getIndexes().size() != 1) {
+				throw new InternalError("Unexpected number of indexes (" + node.getIndexes().size() + ") on a for loop, something is wrong");
+			}
+			
 			writeIndents();
 			writer.print("for(");
-			typeWriter.writeLHS(node.getIndexRegister(), node.getIndexType(), writer);
+			typeWriter.writeLHS(node.getIndexes().get(0).indexRegister, node.getIndexType(), writer);
 			writer.print(" = ");
-			typeWriter.writeRHS(node.getStartRegister(), node.getIndexType(), writer);
+			typeWriter.writeRHS(node.getIndexes().get(0).startRegister, node.getIndexType(), writer);
 			writer.print("; ");
-			typeWriter.writeLHS(node.getIndexRegister(), node.getIndexType(), writer);
+			typeWriter.writeLHS(node.getIndexes().get(0).indexRegister, node.getIndexType(), writer);
 			writer.print(" < ");
-			typeWriter.writeRHS(node.getEndRegister(), node.getIndexType(), writer);
+			typeWriter.writeRHS(node.getIndexes().get(0).endRegister, node.getIndexType(), writer);
 			writer.print("; ");
-			typeWriter.writeLHS(node.getIndexRegister(), node.getIndexType(), writer);
+			typeWriter.writeLHS(node.getIndexes().get(0).indexRegister, node.getIndexType(), writer);
 			writer.print(" = ");
-			typeWriter.writeRHS(node.getIndexRegister(), node.getIndexType(), writer);
+			typeWriter.writeRHS(node.getIndexes().get(0).indexRegister, node.getIndexType(), writer);
 			writer.print(" + 1) {\n");
 
 			checkAndAddJumpsIfNeeded(node, node.body);

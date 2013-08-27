@@ -495,7 +495,7 @@ public class CFGCompatabilityAnalyser {
 												if(requiredIndexes == null) {
 													tempIndexes.add(llval.indexOperand);
 																										
-													if(llval.indexOperand == forLoop.getIndexRegister()) {
+													if(forLoop.getIndexRegisters().contains(llval.indexOperand)) {
 														oneIsVarying = true;
 													}
 													else if(!definedBefore.contains(llval.indexOperand) && !isALoopIndex(llval.indexOperand, u)) {

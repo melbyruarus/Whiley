@@ -144,13 +144,17 @@ public class ForallToForOptimisationStage {
 
 		CFGNode.VanillaCFGNode newVanillaNode = new CFGNode.VanillaCFGNode();
 		
-		Bytecode createRange = new Bytecode.Binary(Code.BinArithOp(Type.List(loop.getIndexType(), false), listRegister, loop.getStartRegister(), loop.getEndRegister(), BinArithKind.RANGE));
+		if(loop.getIndexes().size() != 1) {
+			throw new InternalError("Unexpected number of indexes (" + loop.getIndexes().size() + ") on a for loop, has the order of optimisations been incorrectly specified?");
+		}
+		
+		Bytecode createRange = new Bytecode.Binary(Code.BinArithOp(Type.List(loop.getIndexType(), false), listRegister, loop.getIndexes().get(0).startRegister, loop.getIndexes().get(0).endRegister, BinArithKind.RANGE));
 		createRange.cfgNode = newVanillaNode;
 		newVanillaNode.body.instructions.add(createRange);
 
 		Bytecode.ForAll loopBytecode = new Bytecode.ForAll(Code.ForAll(Type.List(indexType, false),
 															listRegister,
-															loop.getIndexRegister(),
+															loop.getIndexes().get(0).indexRegister,
 															((Code.Loop)loop.getCausialWYILLangBytecode()).modifiedOperands,
 															loop.loopEndLabel()));
 		

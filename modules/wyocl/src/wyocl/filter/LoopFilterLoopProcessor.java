@@ -44,9 +44,10 @@ public class LoopFilterLoopProcessor {
 		{
 			this.add(Type.T_STRING);
 			this.add(Type.T_INT);
-			this.add(Type.List(Type.T_ANY, false));
+			this.add(Type.T_LIST_ANY);
 			this.add(Type.T_INT);
-			this.add(Type.T_INT);
+			this.add(Type.List(Type.T_INT, false));
+			this.add(Type.List(Type.T_INT, false));
 		}
 	};
 	private static Type.FunctionOrMethod executeWYGPUKernelOverRangeFunctionType = Type.FunctionOrMethod.Function(Type.List(Type.T_ANY, false), Type.T_VOID, executeWYGPUKernelOverRangeArgumentTypes);
@@ -85,9 +86,14 @@ public class LoopFilterLoopProcessor {
 
 		// TODO: actually output marshaling and unmarshaling code here? Avoids cost of function call, wrapping/unwrapping multiple times and type tests
 
-		final int temporaryListRegister = DFGIterator.maxUsedRegister(loopNode) + 1;
-		final int temporaryCounterRegister = temporaryListRegister + 1;
-		final int temporaryModuleNameRegister = temporaryCounterRegister + 1;
+		int freeRegister = DFGIterator.maxUsedRegister(loopNode) + 1;
+		
+		final int temporaryListRegister = freeRegister++;
+		final int temporaryCounterRegister = freeRegister++;
+		final int temporaryModuleNameRegister = freeRegister++;
+		final int temporaryNumberOfDimensionsRegister = freeRegister++;
+		final int temporaryDimensionsStartRegister = freeRegister++;
+		final int temporaryDimensionsEndRegister = freeRegister++;
 
 		replacementEntries.add(new Block.Entry(Code.NewList(Type.List(Type.T_ANY, false), temporaryListRegister, argumentRegisters)));
 		replacementEntries.add(new Block.Entry(Code.Const(temporaryModuleNameRegister, Constant.V_STRING(modulePath))));
@@ -106,9 +112,14 @@ public class LoopFilterLoopProcessor {
 		}
 		else if(loopNode instanceof CFGNode.ForLoopNode) {
 			CFGNode.ForLoopNode forNode = (CFGNode.ForLoopNode)loopNode;
-
-			argumentsToFunction.add(forNode.getStartRegister());
-			argumentsToFunction.add(forNode.getEndRegister());
+			
+			replacementEntries.add(new Block.Entry(Code.Const(temporaryNumberOfDimensionsRegister, Constant.V_INTEGER(BigInteger.valueOf(forNode.getIndexes().size())))));
+			replacementEntries.add(new Block.Entry(Code.NewList(Type.List(Type.T_INT, false), temporaryDimensionsStartRegister, forNode.getStartRegisters())));
+			replacementEntries.add(new Block.Entry(Code.NewList(Type.List(Type.T_INT, false), temporaryDimensionsEndRegister, forNode.getEndRegisters())));
+			
+			argumentsToFunction.add(temporaryNumberOfDimensionsRegister);
+			argumentsToFunction.add(temporaryDimensionsStartRegister);
+			argumentsToFunction.add(temporaryDimensionsEndRegister);
 			
 			replacementEntries.add(new Block.Entry(Code.Invoke(executeWYGPUKernelOverRangeFunctionType, temporaryListRegister, argumentsToFunction, executeWYGPUKernelOverRangeFunctionPath)));
 		}

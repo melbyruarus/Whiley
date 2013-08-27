@@ -9,6 +9,7 @@ import wyocl.filter.CFGCompatabilityAnalyser.LoopAnalyserResult;
 import wyocl.filter.optimizer.stages.DeadCodeEliminationStage;
 import wyocl.filter.optimizer.stages.ForallToForOptimisationStage;
 import wyocl.filter.optimizer.stages.MultidimensionalArrayFlatteningStage;
+import wyocl.filter.optimizer.stages.MultidimensionalLoopFlatteningStage;
 
 public class CFGOptimizer {
 
@@ -18,6 +19,7 @@ public class CFGOptimizer {
 		
 		ForallToForOptimisationStage.processAfterAnalysis(dummyNode, analyserResult, argumentRegisters);
 		MultidimensionalArrayFlatteningStage.process(dummyNode, analyserResult, argumentRegisters);
+		MultidimensionalLoopFlatteningStage.process(dummyNode, analyserResult, argumentRegisters);
 		
 		// TODO: performConstantPropogation(dummyNode);
 		

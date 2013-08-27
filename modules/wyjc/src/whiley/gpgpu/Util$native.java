@@ -242,16 +242,32 @@ public class Util$native {
 		System.err.print(overallAverages.otherTime / allResults.size() / number);
 	}
 	
-	public static WyList executeWYGPUKernelOverRange(String moduleName, BigInteger kernelID, WyList arguments, BigInteger start, BigInteger end) {
-		return executeWYGPUKernelOverRange(moduleName, kernelID.intValue(), arguments, start.intValue(), end.intValue());
+	// executeWYGPUKernelOverRange(string moduleName, int kernelID, [any] arguments, int numberOfDimensions, [int] starts, [int] ends):
+	public static WyList executeWYGPUKernelOverRange(String moduleName, BigInteger kernelID, WyList arguments, BigInteger numberOfDimensions, WyList starts_list, WyList ends_list) {
+		if((numberOfDimensions.intValue() != starts_list.size()) || (starts_list.size() != ends_list.size())) {
+			throw new RuntimeException("Inconsistant arguments to executeWYGPUKernelOverRange, range sizes differ");
+		}
+		if(starts_list.size() > 3 || starts_list.size() < 1) {
+			throw new RuntimeException("Unsupported value for numberOfDimensions, must be 1, 2 or 3");
+		}
+		
+		long starts[] = new long[starts_list.size()];
+		long ends[] = new long[ends_list.size()];
+		
+		for(int i=0;i<starts_list.size();i++) {
+			starts[i] = ((BigInteger)starts_list.get(i)).intValue();
+			ends[i] = ((BigInteger)ends_list.get(i)).intValue();
+			
+			if(starts[i] == ends[i]) {
+				return arguments;
+			}
+		}
+		
+		return executeWYGPUKernelOverRange(moduleName, kernelID.intValue(), arguments, starts, ends);
 	}
 
-	public static WyList executeWYGPUKernelOverRange(String moduleName, int kernelID, WyList arguments, int start, int end) {
+	public static WyList executeWYGPUKernelOverRange(String moduleName, int kernelID, WyList arguments, long[] starts, long[] ends) {
 		long functionStartTime = benchmarkingGPU ? System.nanoTime() : 0;
-		
-		if(start == end) {
-			return arguments;
-		}
 				
 		try {
 			String kernelName = "whiley_gpgpu_func_"+kernelID;
@@ -320,7 +336,7 @@ public class Util$native {
 			
 			Event computeEvent = new Event();
 			try {
-				cached.k.enqueueKernelWithWorkSizes(cached.q, 1, new long[] { start }, new long[] { end }, null, writeEvents, computeEvent);
+				cached.k.enqueueKernelWithWorkSizes(cached.q, starts.length, starts, ends, null, writeEvents, computeEvent);
 			}
 			catch(KernelExecutionException e) {
 				if(e.status == CL.CL_INVALID_KERNEL_ARGS) {
@@ -408,11 +424,15 @@ public class Util$native {
 	
 	@SuppressWarnings("unchecked")
 	public static WyList executeWYGPUKernelOverArray(String moduleName, BigInteger kernelID, WyList arguments, WyList sourceList) {
+		if(sourceList.size() == 0) {
+			return arguments;
+		}
+		
 		WyList tempList = new WyList();
 		tempList.add(sourceList);
 		tempList.addAll(arguments);
-				
-		WyList result = executeWYGPUKernelOverRange(moduleName, kernelID.intValue(), tempList, 0, sourceList.size());
+		
+		WyList result = executeWYGPUKernelOverRange(moduleName, kernelID.intValue(), tempList, new long[] {0}, new long[] {sourceList.size()});
 		
 		result.remove(0);
 		

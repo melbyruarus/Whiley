@@ -483,22 +483,31 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 	}
 
 	public static class ForLoopNode extends CFGNode.LoopNode implements GPUSupportedNode {
-		private final int indexRegister;
+		public static class ForLoopIndex {
+			public final int indexRegister;
+			public final int startRegister;
+			public final int endRegister;
+			
+			private DFGNode startDFG;
+			private DFGNode endDFG;
+			private DFGNode indexDFG;
+			
+			private ForLoopIndex(int indexRegister, int startRegister, int endRegister) {
+				this.indexRegister = indexRegister;
+				this.startRegister = startRegister;
+				this.endRegister = endRegister;
+			}
+		}
+		
 		private final Type.Leaf type;
-		private final int startRegister;
-		private final int endRegister;
-
-		private DFGNode startDFG;
-		private DFGNode endDFG;
-		private DFGNode indexDFG;
+		private final List<ForLoopIndex> indexes = new ArrayList<ForLoopIndex>();
 
 		public ForLoopNode(int indexRegister, Type.Leaf type, int startRegister, int endRegister, String loopEndLabel, int startIndex, int endIndex, Code causialWYILLangBytecode) {
 			super(loopEndLabel, startIndex, endIndex, causialWYILLangBytecode);
 			
-			this.indexRegister = indexRegister;
 			this.type = type;
-			this.startRegister = startRegister;
-			this.endRegister = endRegister;
+			
+			indexes.add(new ForLoopIndex(indexRegister, startRegister, endRegister));
 		}
 
 		@Override
@@ -509,58 +518,62 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		@Override
 		protected void populateEndRegisterInfoFromStartRegisterInfo() {
 			endRegisterInfo = new DFGGenerator.DFGReadWriteTracking(startRegisterInfo);
-
-			// Start register
-
-			DFGGenerator.DFGInfo writeStartInfo = startRegisterInfo.writeInfo.registerMapping.get(startRegister);
-			DFGGenerator.DFGInfo readStartInfo = startRegisterInfo.readWriteInfo.registerMapping.get(startRegister);
-			if(startDFG == null) {
-				startDFG = new DFGNode(this, startRegister, type, false);
-			}
-			startDFG.lastModified.addAll(writeStartInfo.lastNodes);
-			if(readStartInfo != null) {
-				startDFG.lastReadOrWrite.addAll(readStartInfo.lastNodes);
-			}
-
-			endRegisterInfo.readWriteInfo.registerMapping.put(startRegister, new DFGGenerator.DFGInfo(startDFG));
-
-			// End register
-
-			DFGGenerator.DFGInfo writeEndInfo = startRegisterInfo.writeInfo.registerMapping.get(endRegister);
-			DFGGenerator.DFGInfo readEndInfo = startRegisterInfo.readWriteInfo.registerMapping.get(endRegister);
-			if(endDFG == null) {
-				endDFG = new DFGNode(this, endRegister, type, false);
-			}
-			endDFG.lastModified.addAll(writeEndInfo.lastNodes);
-			if(readEndInfo != null) {
-				endDFG.lastReadOrWrite.addAll(readEndInfo.lastNodes);
-			}
 			
-			endRegisterInfo.readWriteInfo.registerMapping.put(endRegister, new DFGGenerator.DFGInfo(endDFG));
-
-			// Index register
-
-			DFGGenerator.DFGInfo writeIndexInfo = startRegisterInfo.writeInfo.registerMapping.get(indexRegister);
-			DFGGenerator.DFGInfo readIndexInfo = startRegisterInfo.readWriteInfo.registerMapping.get(indexRegister);
-			if(indexDFG == null) {
-				indexDFG = new DFGNode(this, indexRegister, type, true);
+			for(ForLoopIndex index : indexes) {
+				// Start register
+	
+				DFGGenerator.DFGInfo writeStartInfo = startRegisterInfo.writeInfo.registerMapping.get(index.startRegister);
+				DFGGenerator.DFGInfo readStartInfo = startRegisterInfo.readWriteInfo.registerMapping.get(index.startRegister);
+				if(index.startDFG == null) {
+					index.startDFG = new DFGNode(this, index.startRegister, type, false);
+				}
+				index.startDFG.lastModified.addAll(writeStartInfo.lastNodes);
+				if(readStartInfo != null) {
+					index.startDFG.lastReadOrWrite.addAll(readStartInfo.lastNodes);
+				}
+	
+				endRegisterInfo.readWriteInfo.registerMapping.put(index.startRegister, new DFGGenerator.DFGInfo(index.startDFG));
+	
+				// End register
+	
+				DFGGenerator.DFGInfo writeEndInfo = startRegisterInfo.writeInfo.registerMapping.get(index.endRegister);
+				DFGGenerator.DFGInfo readEndInfo = startRegisterInfo.readWriteInfo.registerMapping.get(index.endRegister);
+				if(index.endDFG == null) {
+					index.endDFG = new DFGNode(this, index.endRegister, type, false);
+				}
+				index.endDFG.lastModified.addAll(writeEndInfo.lastNodes);
+				if(readEndInfo != null) {
+					index.endDFG.lastReadOrWrite.addAll(readEndInfo.lastNodes);
+				}
+				
+				endRegisterInfo.readWriteInfo.registerMapping.put(index.endRegister, new DFGGenerator.DFGInfo(index.endDFG));
+	
+				// Index register
+	
+				DFGGenerator.DFGInfo writeIndexInfo = startRegisterInfo.writeInfo.registerMapping.get(index.indexRegister);
+				DFGGenerator.DFGInfo readIndexInfo = startRegisterInfo.readWriteInfo.registerMapping.get(index.indexRegister);
+				if(index.indexDFG == null) {
+					index.indexDFG = new DFGNode(this, index.indexRegister, type, true);
+				}
+				if(writeIndexInfo != null) {
+					index.indexDFG.lastModified.addAll(writeIndexInfo.lastNodes);
+				}
+				if(readIndexInfo != null) {
+					index.indexDFG.lastReadOrWrite.addAll(readIndexInfo.lastNodes);
+				}
+	
+				endRegisterInfo.readWriteInfo.registerMapping.put(index.indexRegister, new DFGGenerator.DFGInfo(index.indexDFG));
+				endRegisterInfo.writeInfo.registerMapping.put(index.indexRegister, new DFGGenerator.DFGInfo(index.indexDFG));
 			}
-			if(writeIndexInfo != null) {
-				indexDFG.lastModified.addAll(writeIndexInfo.lastNodes);
-			}
-			if(readIndexInfo != null) {
-				indexDFG.lastReadOrWrite.addAll(readIndexInfo.lastNodes);
-			}
-
-			endRegisterInfo.readWriteInfo.registerMapping.put(indexRegister, new DFGGenerator.DFGInfo(indexDFG));
-			endRegisterInfo.writeInfo.registerMapping.put(indexRegister, new DFGGenerator.DFGInfo(indexDFG));
 		}
 
 		@Override
 		public void gatherDFGNodesInto(Set<DFGNode> allDFGNodes) {
-			allDFGNodes.add(startDFG);
-			allDFGNodes.add(endDFG);
-			allDFGNodes.add(indexDFG);
+			for(ForLoopIndex index : indexes) {
+				allDFGNodes.add(index.startDFG);
+				allDFGNodes.add(index.endDFG);
+				allDFGNodes.add(index.indexDFG);
+			}
 		}
 
 		@Override
@@ -568,53 +581,67 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			startRegisterInfo = null;
 			endRegisterInfo = null;
 			
-			DFGGenerator.clearDFGNode(startDFG);
-			DFGGenerator.clearDFGNode(endDFG);
-			DFGGenerator.clearDFGNode(indexDFG);
-			
-			startDFG = null;
-			endDFG = null;
-			indexDFG = null;
+			for(ForLoopIndex index : indexes) {
+				DFGGenerator.clearDFGNode(index.startDFG);
+				DFGGenerator.clearDFGNode(index.endDFG);
+				DFGGenerator.clearDFGNode(index.indexDFG);
+				
+				index.startDFG = null;
+				index.endDFG = null;
+				index.indexDFG = null;
+			}
 		}
 
 		@Override
 		public void getIndexDFGNodes(Set<DFGNode> nodes) {
-			nodes.add(indexDFG);
+			for(ForLoopIndex index : indexes) {
+				nodes.add(index.indexDFG);
+			}
 		}
 
 		@Override
 		public void getSourceDFGNodes(Set<DFGNode> nodes) {
-			nodes.add(startDFG);
-			nodes.add(endDFG);
-		}
-
-		public int getStartRegister() {
-			return startRegister;
-		}
-
-		public int getEndRegister() {
-			return endRegister;
-		}
-
-		public int getIndexRegister() {
-			return indexRegister;
+			for(ForLoopIndex index : indexes) {
+				nodes.add(index.startDFG);
+				nodes.add(index.endDFG);
+			}
 		}
 
 		public Type.Leaf getIndexType() {
 			return type;
 		}
-		
-		public DFGNode getStartDFGNode() {
-			return startDFG;
-		}
-		
-		public DFGNode getEndDFGNode() {
-			return endDFG;
-		}
 
 		@Override
 		public void forBytecode(final BytecodeVisitor bytecodeVisitor) {
 			throw new InternalError(this.getClass().getSimpleName() + " does not support forBytecode(BytecodeVisitor)");
+		}
+
+		public List<ForLoopIndex> getIndexes() {
+			return indexes;
+		}
+
+		public List<Integer> getIndexRegisters() {
+			List<Integer> indexRegisters = new ArrayList<Integer>();
+			for(ForLoopIndex index : indexes) {
+				indexRegisters.add(index.indexRegister);
+			}
+			return indexRegisters;
+		}
+
+		public List<Integer> getStartRegisters() {
+			List<Integer> startRegisters = new ArrayList<Integer>();
+			for(ForLoopIndex index : indexes) {
+				startRegisters.add(index.startRegister);
+			}
+			return startRegisters;
+		}
+		
+		public List<Integer> getEndRegisters() {
+			List<Integer> endRegisters = new ArrayList<Integer>();
+			for(ForLoopIndex index : indexes) {
+				endRegisters.add(index.endRegister);
+			}
+			return endRegisters;
 		}
 	}
 
