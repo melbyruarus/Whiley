@@ -404,11 +404,6 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 				n.next = null;
 			}
 		}
-		
-		@Override
-		public String toString() {
-			return super.toString() + " " + causialLoopBytecode;
-		}
 	}
 
 	public static class ForAllLoopNode extends CFGNode.LoopNode implements GPUSupportedNode {
@@ -479,6 +474,11 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 
 		public Type getIndexType() {
 			return bytecode.getIndexType();
+		}
+		
+		@Override
+		public String toString() {
+			return super.toString() + " " + getCausialWYILLangBytecode();
 		}
 	}
 
@@ -643,6 +643,17 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			}
 			return endRegisters;
 		}
+		
+		@Override
+		public String toString() {
+			String str = super.toString() + " for";
+			
+			for(ForLoopIndex i : indexes) {
+				str = str + " " + i.indexRegister + ":" + i.startRegister + "-" + i.endRegister;
+			}
+			
+			return str;
+		}
 	}
 
 	public static class WhileLoopNode extends CFGNode.LoopNode  implements GPUSupportedNode {
@@ -707,6 +718,11 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			} catch (NotADAGException e) {
 				throw new InternalError("Loop body should be dag");
 			}
+		}
+		
+		@Override
+		public String toString() {
+			return super.toString() + " " + getCausialWYILLangBytecode();
 		}
 	}
 

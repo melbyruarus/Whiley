@@ -708,7 +708,20 @@ public class CFGCompatabilityAnalyser {
 									loop.type = LoopType.GPU_EXPLICIT;
 									break;
 								case GPU_IMPLICIT:
-									loop.type = LoopType.GPU_EXPLICIT;
+									if(loop.getLoopCombatability()) {
+										loop.type = LoopType.GPU_IMPLICIT_INNER;
+									}
+									else {
+										loop.type = LoopType.GPU_EXPLICIT;
+									}
+									break;
+								case GPU_IMPLICIT_INNER:
+									if(loop.getLoopCombatability()) {
+										loop.type = LoopType.GPU_IMPLICIT_INNER;
+									}
+									else {
+										loop.type = LoopType.GPU_EXPLICIT;
+									}
 									break;
 								case CPU_EXPLICIT:
 									if(loop.getLoopCombatability()) {
