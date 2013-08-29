@@ -7,6 +7,9 @@ import wyil.lang.Type;
 
 public class DFGNode {
 	public interface DFGNodeCause {
+
+		void gatherReadDFGNodes(Set<DFGNode> readNodes);
+		void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes);
 	}
 	
 	public final Set<DFGNode> lastModified = new HashSet<DFGNode>();

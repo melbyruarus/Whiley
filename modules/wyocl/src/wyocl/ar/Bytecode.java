@@ -21,6 +21,16 @@ public abstract class Bytecode implements DFGNode.DFGNodeCause {
 	
 	protected abstract void getRegisterSummary(Set<Pair<Integer, Type>> writtenRegisters, Set<Integer> readRegisters);
 	
+	@Override
+	public void gatherReadDFGNodes(Set<DFGNode> readNodes) {
+		readNodes.addAll(readDFGNodes.values());
+	}
+	
+	@Override
+	public void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes) {
+		writtenNodes.addAll(writtenDFGNodes.values());
+	}
+	
 	public String getCodeString() {
 		return wyilLangCode.toString();
 	}

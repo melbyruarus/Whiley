@@ -179,6 +179,8 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		public CFGNode.Block body = new Block();
 		public CFGNode next;
 		private Set<DFGNode> cachedBytecodeDFGNodes;
+		private Set<DFGNode> cachedReadBytecodeDFGNodes;
+		private Set<DFGNode> cachedWriteBytecodeDFGNodes;
 
 		@Override
 		public void getFlowNextNodes(Set<CFGNode> nodes) {
@@ -214,6 +216,8 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			endRegisterInfo = null;
 			
 			cachedBytecodeDFGNodes = null;
+			cachedReadBytecodeDFGNodes = null;
+			cachedWriteBytecodeDFGNodes = null;
 			for(Bytecode b : this.body.instructions) {
 				DFGGenerator.clearDFG(b);
 			}
@@ -256,6 +260,28 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			next.previous.addAll(previous);
 			previous.clear();
 			next = null;
+		}
+
+		@Override
+		public void gatherReadDFGNodes(Set<DFGNode> readNodes) {
+			if(cachedReadBytecodeDFGNodes == null) {
+				for(Bytecode b : body.instructions) {
+					b.gatherReadDFGNodes(cachedReadBytecodeDFGNodes);
+				}
+			}
+			
+			readNodes.addAll(cachedReadBytecodeDFGNodes);
+		}
+
+		@Override
+		public void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes) {
+			if(cachedWriteBytecodeDFGNodes == null) {
+				for(Bytecode b : body.instructions) {
+					b.gatherWrittenDFGNodes(cachedWriteBytecodeDFGNodes);
+				}
+			}
+			
+			writtenNodes.addAll(cachedWriteBytecodeDFGNodes);
 		}
 	}
 
@@ -342,7 +368,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			}
 		}
 
-		public abstract void getIndexDFGNodes(Set<DFGNode> nodes);
+		public abstract void getIndexDFGNodes(Collection<DFGNode> indexDFGs);
 		public abstract void getSourceDFGNodes(Set<DFGNode> nodes);
 
 		public Code getCausialWYILLangBytecode() { // FIXME: remove once performing bytecode-cfg-bytecode conversions
@@ -404,6 +430,16 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 				n.next = null;
 			}
 		}
+
+		@Override
+		public void gatherReadDFGNodes(Set<DFGNode> readNodes) {
+			getSourceDFGNodes(readNodes);
+		}
+
+		@Override
+		public void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes) {
+			getIndexDFGNodes(writtenNodes);
+		}
 	}
 
 	public static class ForAllLoopNode extends CFGNode.LoopNode implements GPUSupportedNode {
@@ -443,7 +479,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void getIndexDFGNodes(Set<DFGNode> nodes) {
+		public void getIndexDFGNodes(Collection<DFGNode> nodes) {
 			nodes.add(bytecode.getIndexDFGNode());
 		}
 
@@ -593,7 +629,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void getIndexDFGNodes(Set<DFGNode> nodes) {
+		public void getIndexDFGNodes(Collection<DFGNode> nodes) {
 			for(ForLoopIndex index : indexes) {
 				nodes.add(index.indexDFG);
 			}
@@ -693,7 +729,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		}
 
 		@Override
-		public void getIndexDFGNodes(Set<DFGNode> nodes) {
+		public void getIndexDFGNodes(Collection<DFGNode> nodes) {
 		}
 
 		@Override
@@ -800,6 +836,14 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		public void disconnect() {
 			// Do nothing as loop parent will deal with it
 		}
+
+		@Override
+		public void gatherReadDFGNodes(Set<DFGNode> readNodes) {
+		}
+
+		@Override
+		public void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes) {
+		}
 	}
 
 	public static class LoopEndNode extends CFGNode implements GPUSupportedNode {
@@ -867,6 +911,14 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		public void disconnect() {
 			// Do nothing as loop parent will deal with it
 		}
+
+		@Override
+		public void gatherReadDFGNodes(Set<DFGNode> readNodes) {
+		}
+
+		@Override
+		public void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes) {
+		}
 	}
 
 	/**
@@ -925,8 +977,8 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 
 		@Override
 		public void gatherDFGNodesInto(Set<DFGNode> allDFGNodes) {
-			allDFGNodes.addAll(switchBytecode.readDFGNodes.values());
-			allDFGNodes.addAll(switchBytecode.writtenDFGNodes.values());
+			switchBytecode.gatherReadDFGNodes(allDFGNodes);
+			switchBytecode.gatherWrittenDFGNodes(allDFGNodes);
 		}
 
 		@Override
@@ -1009,6 +1061,16 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			}
 			branches.clear();
 		}
+
+		@Override
+		public void gatherReadDFGNodes(Set<DFGNode> readNodes) {
+			switchBytecode.gatherReadDFGNodes(readNodes);
+		}
+
+		@Override
+		public void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes) {
+			switchBytecode.gatherWrittenDFGNodes(writtenNodes);
+		}
 	}
 
 	/**
@@ -1052,8 +1114,8 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 
 		@Override
 		public void gatherDFGNodesInto(Set<DFGNode> allDFGNodes) {
-			allDFGNodes.addAll(((Bytecode)conditionalJump).readDFGNodes.values());
-			allDFGNodes.addAll(((Bytecode)conditionalJump).writtenDFGNodes.values());
+			((Bytecode)conditionalJump).gatherReadDFGNodes(allDFGNodes);
+			((Bytecode)conditionalJump).gatherWrittenDFGNodes(allDFGNodes);
 		}
 
 		@Override
@@ -1127,6 +1189,16 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		public String toString() {
 			return super.toString() + " " + conditionalJump.toString(); 
 		}
+
+		@Override
+		public void gatherReadDFGNodes(Set<DFGNode> readNodes) {
+			((Bytecode)conditionalJump).gatherReadDFGNodes(readNodes);
+		}
+
+		@Override
+		public void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes) {
+			((Bytecode)conditionalJump).gatherWrittenDFGNodes(writtenNodes);
+		}
 	}
 
 	public static class ReturnNode extends CFGNode implements GPUSupportedNode {
@@ -1162,8 +1234,8 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		@Override
 		public void gatherDFGNodesInto(Set<DFGNode> allDFGNodes) {
 			if(bytecode != null) {
-				allDFGNodes.addAll(bytecode.readDFGNodes.values());
-				allDFGNodes.addAll(bytecode.writtenDFGNodes.values());
+				bytecode.gatherReadDFGNodes(allDFGNodes);
+				bytecode.gatherWrittenDFGNodes(allDFGNodes);
 			}
 		}
 
@@ -1213,6 +1285,18 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 				n.retargetNext(this, null);
 			}
 			previous.clear();
+		}
+
+		@Override
+		public void gatherReadDFGNodes(Set<DFGNode> readNodes) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes) {
+			// TODO Auto-generated method stub
+			
 		}
 	}
 
@@ -1298,6 +1382,14 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 			}
 			previous.clear();
 		}
+
+		@Override
+		public void gatherReadDFGNodes(Set<DFGNode> readNodes) {
+		}
+
+		@Override
+		public void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes) {
+		}
 	}
 	
 	/**
@@ -1365,6 +1457,14 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 				n.retargetNext(this, null);
 			}
 			previous.clear();
+		}
+
+		@Override
+		public void gatherReadDFGNodes(Set<DFGNode> readNodes) {
+		}
+
+		@Override
+		public void gatherWrittenDFGNodes(Set<DFGNode> writtenNodes) {
 		}
 	}
 }

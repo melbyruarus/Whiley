@@ -19,6 +19,10 @@ public class CFGOptimizer {
 		
 		ForallToForOptimisationStage.processAfterAnalysis(dummyNode, analyserResult, argumentRegisters);
 		MultidimensionalArrayFlatteningStage.process(dummyNode, analyserResult, argumentRegisters);
+		
+		DFGGenerator.clearDFG(dummyNode);
+		DFGGenerator.populateDFG(dummyNode, argumentRegisters);
+		
 		MultidimensionalLoopFlatteningStage.process(dummyNode, analyserResult, argumentRegisters);
 		
 		// TODO: performConstantPropogation(dummyNode);

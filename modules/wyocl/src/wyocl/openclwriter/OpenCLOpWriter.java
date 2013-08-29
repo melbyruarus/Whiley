@@ -2,6 +2,7 @@ package wyocl.openclwriter;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -105,40 +106,41 @@ public class OpenCLOpWriter {
 		PrintWriter writer = new PrintWriter(sw);
 
 		CFGNode.LoopNode loopNode = rootNode;
-		Set<DFGNode> indexDFGs = new HashSet<DFGNode>();
+		List<DFGNode> indexDFGs = new ArrayList<DFGNode>();
 		loopNode.getIndexDFGNodes(indexDFGs);
 
-		if(indexDFGs.size() != 1) {
-			throw new InternalError("Unable to handle more/less than one simultanious index register");
-		}
-
-		DFGNode indexDFG = indexDFGs.iterator().next();
-
 		if(entries.size() > 0) {
-			Utils.writeIndents(writer, 1);
-			typeWriter.writeLHS(indexDFG.register, indexDFG.type, writer);
-			writer.print(" = ");
-
-			if(rootNode instanceof CFGNode.ForAllLoopNode) {
-				Bytecode.ForAll forAll = ((CFGNode.ForAllLoopNode)loopNode).getBytecode();
-
-				typeWriter.writeListAccessor(forAll.getSourceRegister(), forAll.getSourceType(), new ExpressionWriter() {
-					@Override
-					public void writeExpression(PrintWriter writer) {
-						writeKernelGlobalIndex(0, writer); // TODO: Support multiple dimensions
-					}
-				}, writer);
+			final int dimension[] = new int[1];
+			dimension[0] = 0;
+			
+			for(DFGNode indexDFG : indexDFGs) {
+				Utils.writeIndents(writer, 1);
+				typeWriter.writeLHS(indexDFG.register, indexDFG.type, writer);
+				writer.print(" = ");
+	
+				if(rootNode instanceof CFGNode.ForAllLoopNode) {
+					Bytecode.ForAll forAll = ((CFGNode.ForAllLoopNode)loopNode).getBytecode();
+	
+					typeWriter.writeListAccessor(forAll.getSourceRegister(), forAll.getSourceType(), new ExpressionWriter() {
+						@Override
+						public void writeExpression(PrintWriter writer) {
+							writeKernelGlobalIndex(dimension[0], writer); // TODO: Support multiple dimensions
+						}
+					}, writer);
+				}
+				else if(rootNode instanceof CFGNode.ForLoopNode) {
+					writeKernelGlobalIndex(dimension[0], writer); // TODO: Support multiple dimensions
+				}
+				else {
+					throw new InternalError("Unexepected loop type encountered: " + rootNode);
+				}
+	
+				writer.println("; // Get work item");
+	
+				entries.remove(entries.size()-1);
+				
+				dimension[0]++;
 			}
-			else if(rootNode instanceof CFGNode.ForLoopNode) {
-				writeKernelGlobalIndex(0, writer); // TODO: Support multiple dimensions
-			}
-			else {
-				throw new InternalError("Unexepected loop type encountered: " + rootNode);
-			}
-
-			writer.println("; // Get work item");
-
-			entries.remove(entries.size()-1);
 		}
 
 		startTask(entries, bodyWriter, writer, sw);

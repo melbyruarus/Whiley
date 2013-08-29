@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
+import wyocl.ar.Bytecode;
 import wyocl.ar.CFGNode;
 import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator.CFGNodeCallback;
@@ -116,26 +117,40 @@ public class DFGIterator {
 	/**
 	 * Determine if one node depends upon an other
 	 * 
-	 * @param one
-	 * @param two
+	 * @param startNodes
+	 * @param exclusiveNodes
 	 * @return Whether one depends upon two
 	 */
-	public static boolean doesNodeDependUpon(DFGNode one, final DFGNode two) {
-		final boolean doesDepend[] = new boolean[1];
-		doesDepend[0] = false;
+	public static boolean doNodesDependUpon(Set<DFGNode> startNodes, final Set<DFGNode> exclusiveNodes) {
+		Set<DFGNode> dependantNodes = new HashSet<DFGNode>();
+		gatherDependantNodes(startNodes, dependantNodes);
 		
-		iterateDFGAlongLastModified(new DFGNodeCallback() {
-			@Override
-			public boolean process(DFGNode node) {
-				if(node == two) {
-					doesDepend[0] = true;
-					return false;
+		dependantNodes.retainAll(exclusiveNodes);
+		
+		return !dependantNodes.isEmpty();
+	}
+	
+	public static void gatherDependantNodes(Set<DFGNode> startNodes, Set<DFGNode> dependantNodes) {
+		Set<DFGNode> fringe = new HashSet<DFGNode>();
+		Set<DFGNode> temp = new HashSet<DFGNode>();
+		fringe.addAll(startNodes);
+		
+		while(!fringe.isEmpty()) {
+			DFGNode node = fringe.iterator().next();
+			dependantNodes.add(node);
+			fringe.remove(node);
+			
+			temp.clear();
+			node.cause.gatherReadDFGNodes(temp);
+
+			for(DFGNode next : temp) {
+				if(!dependantNodes.contains(next.lastModified)) {
+					fringe.addAll(next.lastModified);
 				}
-				return true;
+
+				dependantNodes.add(next);
 			}
-		}, one);
-		
-		return doesDepend[0];
+		}
 	}
 
 	public static int maxUsedRegister(CFGNode node) {
@@ -162,5 +177,24 @@ public class DFGIterator {
 		}
 		
 		return max;
+	}
+
+	public static boolean doesDFGNodeOccurBetween(CFGNode startNode, CFGNode endNode, DFGNode dfgNode) {
+		CFGNode node = null;
+		if(dfgNode.cause instanceof Bytecode) {
+			Bytecode bytecode = (Bytecode)dfgNode.cause;
+			node = bytecode.cfgNode;
+		}
+		else if(dfgNode.cause instanceof CFGNode) {
+			node = (CFGNode)dfgNode.cause;
+		}
+		else if(dfgNode.cause == null) { // This can only occur for registers defined outside this function, i.e. argument
+			return false;
+		}
+		else {
+			throw new InternalError("Unknown DFGNode cause: " + dfgNode.cause);
+		}
+													
+		return CFGIterator.doesNodeDependUpon(node, startNode, endNode);
 	}
 }

@@ -19,7 +19,6 @@ import wyil.lang.Type.Leaf;
 import wyocl.ar.Bytecode;
 import wyocl.ar.Bytecode.Load;
 import wyocl.ar.CFGNode;
-import wyocl.ar.CFGNode.LoopEndNode;
 import wyocl.ar.CFGNode.LoopNode;
 import wyocl.ar.CFGNode.VanillaCFGNode;
 import wyocl.ar.DFGGenerator.DFGInfo;
@@ -364,7 +363,7 @@ public class CFGCompatabilityAnalyser {
 				DFGIterator.iterateDFGAlongLastModified(new DFGNodeCallback() {
 					@Override
 					public boolean process(DFGNode node) {
-						if(doesDFGNodeOccurBetween(cfgNode.body, cfgNode.endNode, node)) {
+						if(DFGIterator.doesDFGNodeOccurBetween(cfgNode.body, cfgNode.endNode, node)) {
 							if(node.isAssignment) {
 								written.add(node);
 							}
@@ -380,7 +379,7 @@ public class CFGCompatabilityAnalyser {
 				DFGIterator.iterateDFGAlongLastRead(new DFGNodeCallback() {
 					@Override
 					public boolean process(DFGNode node) {
-						if(doesDFGNodeOccurBetween(cfgNode.body, cfgNode.endNode, node)) {
+						if(DFGIterator.doesDFGNodeOccurBetween(cfgNode.body, cfgNode.endNode, node)) {
 							if(!node.isAssignment) {
 								read.add(node);
 							}
@@ -663,25 +662,6 @@ public class CFGCompatabilityAnalyser {
 				
 				return true;
 			}
-		}
-
-		private boolean doesDFGNodeOccurBetween(CFGNode startNode, LoopEndNode endNode, DFGNode dfgNode) {
-			CFGNode node = null;
-			if(dfgNode.cause instanceof Bytecode) {
-				Bytecode bytecode = (Bytecode)dfgNode.cause;
-				node = bytecode.cfgNode;
-			}
-			else if(dfgNode.cause instanceof CFGNode) {
-				node = (CFGNode)dfgNode.cause;
-			}
-			else if(dfgNode.cause == null) { // This can only occur for registers defined outside this function, i.e. argument
-				return false;
-			}
-			else {
-				throw new InternalError("Unknown DFGNode cause: " + dfgNode.cause);
-			}
-												
-			return CFGIterator.doesNodeDependUpon(node, startNode, endNode);
 		}
 
 		private void determineLoopTypes() {
