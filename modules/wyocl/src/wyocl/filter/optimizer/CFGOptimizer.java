@@ -41,7 +41,7 @@ public class CFGOptimizer {
 		rootNode.previous.add(dummyNode);
 		
 		ForallToForOptimisationStage.processBeforeAnalysis(dummyNode, argumentRegisters);
-				
+		
 		// TODO: performConstantPropogation(dummyNode);
 		
 		DFGGenerator.clearDFG(dummyNode);

@@ -108,7 +108,7 @@ public class OpenCLOpWriter {
 		CFGNode.LoopNode loopNode = rootNode;
 		List<DFGNode> indexDFGs = new ArrayList<DFGNode>();
 		loopNode.getIndexDFGNodes(indexDFGs);
-
+		
 		if(entries.size() > 0) {
 			final int dimension[] = new int[1];
 			dimension[0] = 0;
@@ -124,23 +124,23 @@ public class OpenCLOpWriter {
 					typeWriter.writeListAccessor(forAll.getSourceRegister(), forAll.getSourceType(), new ExpressionWriter() {
 						@Override
 						public void writeExpression(PrintWriter writer) {
-							writeKernelGlobalIndex(dimension[0], writer); // TODO: Support multiple dimensions
+							writeKernelGlobalIndex(dimension[0], writer);
 						}
 					}, writer);
 				}
 				else if(rootNode instanceof CFGNode.ForLoopNode) {
-					writeKernelGlobalIndex(dimension[0], writer); // TODO: Support multiple dimensions
+					writeKernelGlobalIndex(dimension[0], writer);
 				}
 				else {
 					throw new InternalError("Unexepected loop type encountered: " + rootNode);
 				}
 	
 				writer.println("; // Get work item");
-	
-				entries.remove(entries.size()-1);
 				
 				dimension[0]++;
 			}
+			
+			entries.remove(entries.size()-1);
 		}
 
 		startTask(entries, bodyWriter, writer, sw);

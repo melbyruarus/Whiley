@@ -414,7 +414,7 @@ public abstract class CFGNode implements TopologicalSorter.DAGSortNode, DFGNode.
 		
 		@Override
 		public boolean isEmpty() {
-			return body == endNode || body.isEmpty();
+			return body == endNode;
 		}
 
 		@Override

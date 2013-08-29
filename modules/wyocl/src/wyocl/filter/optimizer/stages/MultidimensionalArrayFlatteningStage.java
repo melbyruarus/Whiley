@@ -279,7 +279,7 @@ public class MultidimensionalArrayFlatteningStage {
 		Type.Function unflattenFunctionType = Type.Function(Type.T_LIST_ANY, Type.T_VOID, Type.T_LIST_ANY, Type.T_LIST_ANY, Type.T_INT, dimensionsListType);
 		NameID unflattenName = new NameID(Trie.fromString("whiley/gpgpu/Util"), "unflattenMultidimensionalArray");
 		CFGNode.VanillaCFGNode footerNode = new CFGNode.VanillaCFGNode();
-		Bytecode invk = new Bytecode.Invoke(Code.Invoke(unflattenFunctionType, freeRegister++, unflattenOperands, unflattenName));
+		Bytecode invk = new Bytecode.Invoke(Code.Invoke(unflattenFunctionType, oldRegister, unflattenOperands, unflattenName));
 		invk.cfgNode = footerNode;
 		footerNode.body.instructions.add(invk);
 		

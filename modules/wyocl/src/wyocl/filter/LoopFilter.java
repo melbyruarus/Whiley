@@ -31,19 +31,18 @@ import wyocl.util.SymbolUtilities;
 
 public class LoopFilter {
 	/**
-	 * A unique path which can be used to identify the module currently
-	 * being filtered.
+	 * A unique path which can be used to identify the module currently being filtered.
 	 */
 	private final String modulePath;
 	private int kernelID = 0;
 	private final FunctionResolver functionResolver;
-		
+	
 	private Map<Integer, DFGNode> methodArgumentsDFGNodes;
 	private Map<String, OpenCLFunctionDescription> functionDescriptions = new HashMap<String, OpenCLFunctionDescription>();
 	private Set<String> functionsBeingProcessed = new HashSet<String>();
 	private Map<String, Set<String>> functionsCalledByFunctions = new HashMap<String, Set<String>>();
 	private Map<String, Boolean> functionCompatabilities = new HashMap<String, Boolean>();
-
+	
 	public static interface FunctionResolver {
 		public Block blockForFunctionWithName(NameID name, FunctionOrMethod type);
 	}
@@ -52,7 +51,7 @@ public class LoopFilter {
 		this.functionResolver = functionResolver;
 		modulePath = id.toString();
 	}
-
+	
 	public Block processBlock(Block blk, Map<CFGNode.LoopNode, OpenCLKernelInvocationDescription> kernels, Set<String> calledFunctions) {
 		if(methodArgumentsDFGNodes == null) {
 			throw new InternalError("beginMethod() must be called before processBlock()");
@@ -62,7 +61,7 @@ public class LoopFilter {
 			kernels = new HashMap<CFGNode.LoopNode, OpenCLKernelInvocationDescription>();
 		}
 		final Map<CFGNode.LoopNode, OpenCLKernelInvocationDescription> finalkernels = kernels;
-
+		
 		List<Block.Entry> entries = new ArrayList<Block.Entry>();
 		for(Block.Entry be : blk) {
 			entries.add(be);
@@ -74,7 +73,7 @@ public class LoopFilter {
 				}
 			}
 		}
-
+		
 		Set<CFGNode.ReturnNode> exitPoints = new HashSet<CFGNode.ReturnNode>();
 		Set<UnresolvedTargetNode> unresolvedTargets = new HashSet<CFGNode.UnresolvedTargetNode>();
 		CFGNode rootNode = CFGGenerator.processEntries(entries, exitPoints, unresolvedTargets, methodArgumentsDFGNodes);
@@ -88,7 +87,7 @@ public class LoopFilter {
 			rootNode = CFGOptimizer.processAfterAnalysis(rootNode, prelimAnalyserResult, methodArgumentsDFGNodes);
 			
 			sortedCFG = CFGIterator.createNestedRepresentation(rootNode);
-
+			
 			final LoopAnalyserResult analyserResult = CFGCompatabilityAnalyser.analyse(rootNode, sortedCFG, functionCompatabilities, true, prelimAnalyserResult);
 			if(!analyserResult.anyLoopsCompatable) {
 				return createBlock(analyserResult, finalkernels, rootNode, blk);
@@ -113,7 +112,7 @@ public class LoopFilter {
 				public boolean process(CFGNode node) {
 					if(node instanceof CFGNode.LoopNode) {
 						if(analyserResult.loopCompatabilities.get(node) == LoopType.GPU_IMPLICIT) {
-							finalkernels.put((LoopNode) node, LoopFilterLoopProcessor.process((LoopNode) node, modulePath, kernelID++));
+							finalkernels.put((LoopNode)node, LoopFilterLoopProcessor.process((LoopNode)node, modulePath, kernelID++));
 						}
 					}
 					return true;
@@ -126,7 +125,7 @@ public class LoopFilter {
 			return null;
 		}
 	}
-
+	
 	private Block createBlock(final LoopAnalyserResult analyserResult, final Map<CFGNode.LoopNode, OpenCLKernelInvocationDescription> finalkernels, CFGNode rootNode, Block blk) {
 		final List<Entry> blockEntries = new ArrayList<Entry>();
 		
@@ -142,8 +141,7 @@ public class LoopFilter {
 					
 					if(analyserResult.loopCompatabilities.get(loop) == LoopType.CPU_EXPLICIT) {
 						processCompatableNode(node);
-					}
-					else {
+					} else {
 						if(finalkernels.get(loop) == null) {
 							throw new InternalError("Loop replacements should have been computed for: " + loop + " with compatability: " + analyserResult.loopCompatabilities.get(loop));
 						}
@@ -154,35 +152,32 @@ public class LoopFilter {
 							blockEntries.add(new Entry(Code.Goto(CFGNode.calculateLabel(loop.endNode.next))));
 						}
 					}
-				}
-				else {
+				} else {
 					processCompatableNode(node);
 				}
 				return true;
 			}
-
+			
 			private void processCompatableNode(CFGNode node) {
 				node.forBytecode(new BytecodeVisitor() {
 					@Override
 					public void visit(Bytecode b) {
 						blockEntries.add(new Entry(b.getWYILLangBytecode()));
 					}
-
+					
 					@Override
 					public boolean shouldVisitNode(CFGNode node) {
 						if(node instanceof CFGNode.LoopNode) {
 							CFGNode.LoopNode loop = (CFGNode.LoopNode)node;
 							if(analyserResult.loopCompatabilities.get(loop) == LoopType.CPU_EXPLICIT) {
 								return true;
-							}
-							else {
+							} else {
 								blockEntries.add(new Entry(Code.Label(CFGNode.calculateLabel(loop))));
 								blockEntries.addAll(finalkernels.get(loop).replacementEntries);
 								blockEntries.add(new Entry(Code.Goto(CFGNode.calculateLabel(loop.endNode.next))));
 								return false;
 							}
-						}
-						else {
+						} else {
 							return true;
 						}
 					}
@@ -192,7 +187,7 @@ public class LoopFilter {
 		
 		return new Block(blk.numInputs(), blockEntries);
 	}
-
+	
 	private OpenCLFunctionDescription processFunction(NameID name, Block blk, Type.FunctionOrMethod type) {
 		if(blk == null) {
 			return null;
@@ -256,8 +251,7 @@ public class LoopFilter {
 			} catch (NotADAGException e) {
 				throw new InternalError("Functions cannot be non-DAGs");
 			}
-		}
-		else {
+		} else {
 			functionCompatabilities.put(mangledName, false);
 		}
 		
@@ -265,7 +259,7 @@ public class LoopFilter {
 		
 		return returnValue;
 	}
-
+	
 	public void beginMethod(WyilFile.MethodDeclaration method) {
 		methodArgumentsDFGNodes = new HashMap<Integer, DFGNode>();
 		
@@ -276,7 +270,7 @@ public class LoopFilter {
 			register++;
 		}
 	}
-
+	
 	public void endMethod() {
 		methodArgumentsDFGNodes = null;
 	}
