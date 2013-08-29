@@ -113,6 +113,8 @@ public class Util$native {
 	private static boolean benchmarkingGPU = false;
 	private static ArrayList<ArrayList<GPUResult>> allResults = new ArrayList<ArrayList<GPUResult>>();
 	private static ArrayList<GPUResult> currentResult;
+	private static ArrayList<Long> arrayFlatteningTimes = new ArrayList<Long>();
+	private static ArrayList<Long> arrayUnflatteningTimes = new ArrayList<Long>();
 	
 	public static void beginGPUBenchmarking() {		
 		benchmarkingGPU = true;
@@ -221,8 +223,7 @@ public class Util$native {
 		
 		System.err.println();
 		System.err.println();
-		
-		
+				
 		System.err.print("Overall averages:");
 		System.err.print(", ");
 		System.err.print(overallAverages.totalTime / allResults.size() / number);
@@ -240,6 +241,38 @@ public class Util$native {
 		System.err.print(overallAverages.unmarshallingTime / allResults.size() / number);
 		System.err.print(", ");
 		System.err.print(overallAverages.otherTime / allResults.size() / number);
+		
+		System.err.println();
+		System.err.println();
+		
+		if(arrayFlatteningTimes.size() > 0) {
+			System.err.print("Array flattening times: ");
+			long flatteningSum = 0;
+			for(Long l : arrayFlatteningTimes) {
+				System.err.print(", ");
+				System.err.print(l);
+				flatteningSum += l;
+			}
+			
+			System.err.println();
+			
+			System.err.print("Array unflattening times: ");
+			long unflatteningSum = 0;
+			for(Long l : arrayUnflatteningTimes) {
+				System.err.print(", ");
+				System.err.print(l);
+				unflatteningSum += l;
+			}
+			
+			System.err.println();
+			System.err.println();
+			
+			System.err.print("Flattening/Unflattening averages: ");
+			System.err.print(", ");
+			System.err.print(flatteningSum / arrayFlatteningTimes.size());
+			System.err.print(", ");
+			System.err.print(unflatteningSum / arrayUnflatteningTimes.size());
+		}
 	}
 	
 	// executeWYGPUKernelOverRange(string moduleName, int kernelID, [any] arguments, int numberOfDimensions, [int] starts, [int] ends):
@@ -268,7 +301,7 @@ public class Util$native {
 
 	public static WyList executeWYGPUKernelOverRange(String moduleName, int kernelID, WyList arguments, long[] starts, long[] ends) {
 		long functionStartTime = benchmarkingGPU ? System.nanoTime() : 0;
-				
+						
 		try {
 			String kernelName = "whiley_gpgpu_func_"+kernelID;
 			Cached cached = cachedKernels.get(kernelName);
@@ -305,8 +338,7 @@ public class Util$native {
 			
 			long uploadStartTime = benchmarkingGPU ? System.nanoTime() : 0;
 
-			// ------------------------ Begin computation
-			// -------------------------
+			// ------------------------ Begin computation -------------------------
 
 			EventList writeEvents = new EventList();
 			List<GPUReferenceArgument> memoryArguments = new ArrayList<GPUReferenceArgument>();
@@ -370,8 +402,7 @@ public class Util$native {
 			
 			long unmarshallingEndTime = benchmarkingGPU ? System.nanoTime() : 0;
 
-			// ------------------------ End computation
-			// -------------------------
+			// ------------------------ End computation -------------------------
 
 			readEvents.release();
 			writeEvents.release();
@@ -690,8 +721,7 @@ public class Util$native {
 	}
 
 	private static void writeObjectToBytes(WyList list, ByteBuffer buffer) {
-		buffer.putInt(list.size()); // FIXME: this assumes lots about the format
-									// of cl_int
+		buffer.putInt(list.size()); // FIXME: this assumes lots about the format of cl_int
 
 		for (Object o : list) {
 			writeObjectToBytes(o, buffer);
@@ -699,8 +729,7 @@ public class Util$native {
 	}
 	
 	private static void writeObjectToBytes(WyTuple tuple, ByteBuffer buffer) {
-		buffer.putInt(tuple.size()); // FIXME: this assumes lots about the format
-									// of cl_int
+		buffer.putInt(tuple.size()); // FIXME: this assumes lots about the format of cl_int
 
 		for (Object o : tuple) {
 			writeObjectToBytes(o, buffer);
@@ -708,18 +737,15 @@ public class Util$native {
 	}
 
 	private static void writeObjectToBytes(WyRat rat, ByteBuffer buffer) {
-		buffer.putFloat(rat.floatValue()); // FIXME: this assumes lots about the
-											// format of cl_float
+		buffer.putFloat(rat.floatValue()); // FIXME: this assumes lots about the format of cl_float
 	}
 
 	private static void writeObjectToBytes(BigInteger integer, ByteBuffer buffer) {
-		buffer.putInt(integer.intValue()); // FIXME: this assumes lots about the
-											// format of cl_int
+		buffer.putInt(integer.intValue()); // FIXME: this assumes lots about the format of cl_int
 	}
 	
 	private static void writeObjectToBytes(Boolean bool, ByteBuffer buffer) {
-		buffer.put((byte) (((boolean)bool)?1:0)); // FIXME: this assumes lots about the
-													// format of cl_uint8
+		buffer.put((byte) (((boolean)bool)?1:0)); // FIXME: this assumes lots about the format of cl_uint8
 	}
 
 	private static int sizeofObject(WyList list) {
@@ -761,6 +787,8 @@ public class Util$native {
 	// public native ([any], [int]) flattenMultidimensionalArray([any] multiDArray, int numberOfDimensions):
 	@SuppressWarnings("unchecked")
 	public static WyTuple flattenMultidimensionalArray(WyList multiDArray, BigInteger numberOfDimensionsBig) {
+		long functionStartTime = benchmarkingGPU ? System.nanoTime() : 0;
+		
 		int numberOfDimensions = numberOfDimensionsBig.intValue();
 				
 		WyList dimensions = new WyList(numberOfDimensions);
@@ -768,8 +796,6 @@ public class Util$native {
 			dimensions.add(0);
 		}
 		recursivlyDetermineDimensions(multiDArray, 0, numberOfDimensions, dimensions);
-
-		System.err.println(dimensions);
 		
 		int totalSize = 1;
 		for(Object o : dimensions) {
@@ -788,6 +814,10 @@ public class Util$native {
 		WyTuple result = new WyTuple(2);
 		result.add(outlist);
 		result.add(dimensions);
+		
+		if(benchmarkingGPU) {
+			arrayFlatteningTimes.add(System.nanoTime() - functionStartTime);
+		}
 		
 		return result;
 	}
@@ -823,6 +853,8 @@ public class Util$native {
 
 	// public native [any] unflattenMultidimensionalArray([any] flatArray, [any] multiDArray, int numberOfDimensions, [int] sizeOfEachDimension):
 	public static WyList unflattenMultidimensionalArray(WyList flatArray, WyList multiDArray, BigInteger numberOfDimensionsBig, WyList sizeOfEachDimension) {
+		long functionStartTime = benchmarkingGPU ? System.nanoTime() : 0;
+		
 		int numberOfDimensions = numberOfDimensionsBig.intValue();
 		
 		List<Integer> dimensions = new ArrayList<Integer>();
@@ -832,6 +864,10 @@ public class Util$native {
 		}
 		
 		recursivlyCopyUnflatArray(multiDArray, flatArray, 0, numberOfDimensions, dimensions, 0);
+		
+		if(benchmarkingGPU) {
+			arrayUnflatteningTimes.add(System.nanoTime() - functionStartTime);
+		}
 		
 		return multiDArray;
 	}

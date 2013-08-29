@@ -13,7 +13,7 @@ public ([real], int) createBlurMask(real sigma):
     sum = 0.0
     for a in -maskSize..maskSize:
         for b in -maskSize..maskSize:
-            temp = Math.exp(-((real)(a*a+b*b) / (2.0*sigma*sigma)))
+            temp = Math.round(100.0*Math.exp(-((real)(a*a+b*b) / (2.0*sigma*sigma))))/100.0
             sum = sum + temp
             mask[a+maskSize+(b+maskSize)*(maskSize*2+1)] = temp
 
@@ -21,12 +21,6 @@ public ([real], int) createBlurMask(real sigma):
         mask[i] = mask[i] / sum
  
     return (mask, maskSize)
-
-public real sample([real] image, int x, int y, int size):
-	if x >= 0 && x < size && y >= 0 && y < size:
-		return image[x + y * size]
-	else:
-		return 0
 
 public void ::debugImage(System.Console sys, [real] image, int size):
 	x = 0
@@ -53,7 +47,13 @@ public void ::main(System.Console sys):
 	    sum = 0.0
 	    for a in -maskSize..maskSize:
 	        for b in -maskSize..maskSize:
-	            sum = sum + mask[a+maskSize+(b+maskSize)*(maskSize*2+1)] * sample(image, posx + a, posy + b, size)
+	        	sample = 0
+	        	x = (posx + a)
+	        	y = (posy + b)
+	        	if x >= 0 && x < size && y >= 0 && y < size:
+					sample = image[x + y * size]
+
+	            sum = sum + mask[a+maskSize+(b+maskSize)*(maskSize*2+1)] * sample
 	 
 	    blurredImage[pos] = sum
 

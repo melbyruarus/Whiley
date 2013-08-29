@@ -26,6 +26,8 @@ public void ::main(System.Console sys):
 	n = 500
 
 	indata = []
+
+	data = createNodes(n)
 	
 	numRuns = 50
 	numWarmRuns = 2
@@ -33,7 +35,6 @@ public void ::main(System.Console sys):
 		if numWarmRuns <= 0:
 			beginGPUBenchmarking()
 
-		data = createNodes(n)
 		indata = data
 		outdata = data
 

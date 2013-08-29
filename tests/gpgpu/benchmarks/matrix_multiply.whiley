@@ -1,14 +1,17 @@
 import * from whiley.lang.*
 import * from whiley.gpgpu.*
 
-define Matrix as {int w, int h, [int] data}
+define Matrix as {int w, int h, [[int]] data}
 
 public Matrix newMatrix(int start, int mod, int w, int h):
 	num = start
 	data = []
-	for n in 0..(w * h):
-		data = data + [num]
-		num = (num + 1) % mod
+	for y in 0..h:
+		temp = []
+		for x in 0..w:
+			temp = temp + [num]
+			num = (num + 1) % mod
+		data = data + [temp]
 	return {w: w, h:h, data:data}
 
 public Matrix multiplyMatrix(Matrix one, Matrix two):
@@ -19,22 +22,20 @@ public Matrix multiplyMatrix(Matrix one, Matrix two):
 	w2 = two.w
 	h = two.h
 
-	ret = {w:w, h:h, data:0..(w * h)}
+	ret = one
 
 	oneData = one.data
 	twoData = two.data
 	data = ret.data
 
-	for index in 0..(w * h):
-		j = index / w
-		i = index % w
+	for j in 0..h:
+		for i in 0..w:
+			result = 0
 
-		result = 0
+			for n in 0..w:
+				result = result + oneData[j][n] * twoData[n][i]
 
-		for n in 0..w:
-			result = result + oneData[j * w1 + n] * twoData[n * w2 + i]
-
-		data[j * w + i] = result
+			data[j][i] = result
 
 	ret.data = data
 
@@ -44,7 +45,7 @@ public void ::printMatrix(System.Console sys, Matrix m):
 	for y in 0..m.h:
 		sep = ""
 		for x in 0..m.w:
-			sys.out.print(sep + m.data[y * m.w + x])
+			sys.out.print(sep + m.data[y][x])
 			sep = ", "
 		sys.out.println("")
 	sys.out.println(m.h)

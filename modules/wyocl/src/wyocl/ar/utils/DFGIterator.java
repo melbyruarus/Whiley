@@ -141,7 +141,9 @@ public class DFGIterator {
 			fringe.remove(node);
 			
 			temp.clear();
-			node.cause.gatherReadDFGNodes(temp);
+			if(node.cause != null) {
+				node.cause.gatherReadDFGNodes(temp);
+			}
 
 			for(DFGNode next : temp) {
 				if(!dependantNodes.contains(next.lastModified)) {
