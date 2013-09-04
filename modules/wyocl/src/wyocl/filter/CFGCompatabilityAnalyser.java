@@ -324,10 +324,6 @@ public class CFGCompatabilityAnalyser {
 			if(DEBUG) { System.err.println("Determine loop data dependancies"); }
 
 			for(LoopDescription loop : allLoops.values()) {
-				// FIXME: Nested loop indexes used should be constant range
-				// FIXME: no more than one nested loop
-				// FIXME: reads not verified if not using indexes
-				
 				loop.dataDependanciesCompatable = true;
 				final LoopNode cfgNode = loop.loopNode;
 				

@@ -18,8 +18,10 @@ public ([real], int) createBlurMask(real sigma):
             sum = sum + temp
             mask[a+maskSize+(b+maskSize)*(maskSize*2+1)] = temp
 
-    for i in 0..arraySize:
+    i = 0
+    while i < arraySize:
         mask[i] = mask[i] / sum
+        i = i+1
  
     return (mask, maskSize)
 
@@ -54,7 +56,7 @@ public void ::main(System.Console sys):
 		    sum = 0.0
 		    for a in -maskSize..maskSize:
 		        for b in -maskSize..maskSize:
-		            sample = 0
+		            sample = 0.0
 		        	x = (posx + a)
 		        	y = (posy + b)
 		        	if x >= 0 && x < size && y >= 0 && y < size:

@@ -3,6 +3,7 @@ package wyocl.filter.optimizer.stages;
 import java.util.List;
 import java.util.Map;
 
+import wyocl.ar.ARPrinter;
 import wyocl.ar.Bytecode;
 import wyocl.ar.CFGGenerator;
 import wyocl.ar.CFGNode;
@@ -11,10 +12,23 @@ import wyocl.ar.DFGGenerator;
 import wyocl.ar.DFGNode;
 import wyocl.ar.utils.CFGIterator;
 import wyocl.ar.utils.CFGIterator.CFGNodeCallback;
+import wyocl.ar.utils.NotADAGException;
 
 public class DeadCodeEliminationStage {
+	private static final boolean DEBUG = false;
+	
 	public static void process(final DummyNode dummyNode, final Map<Integer, DFGNode> argumentRegisters) {
 		// TODO: eliminate iteratively & nodes
+		
+		if(DEBUG) {
+			System.err.println("------before-------");
+			try {
+				ARPrinter.print(dummyNode, false);
+			} catch (NotADAGException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
 		
 		final boolean earlyTermination[] = new boolean[1];
 		earlyTermination[0] = true;
@@ -78,6 +92,16 @@ public class DeadCodeEliminationStage {
 					return true;
 				}
 			}, dummyNode, null);
+		}
+		
+		if(DEBUG) {
+			System.err.println("------after-------");
+			try {
+				ARPrinter.print(dummyNode, false);
+			} catch (NotADAGException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		}
 	}
 }

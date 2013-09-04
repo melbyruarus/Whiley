@@ -20,6 +20,4 @@ wyb reduce_sum &&
 
 mv *.csv $SAVEDIR/ &&
 
-rm *.{cl,class,wyil,wyasm} 2>/dev/null ||
-
-echo "Error!"
+rm *.{cl,class,wyil,wyasm} 2>/dev/null

@@ -15,8 +15,10 @@ public void ::main(System.Console sys):
 			beginGPUBenchmarking()
 
 		fro = 1000..(1000 + fullSize)
-		for n in 0..|fro|:
+		n = 0
+		while n < |fro|:
 			fro[n] = fro[n] % 100
+			n = n+1
 
 		levelSize = |fro|
 		numBlocks = levelSize / blockSize

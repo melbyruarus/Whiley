@@ -24,6 +24,9 @@ public class ForallToForOptimisationStage {
 	public static void processBeforeAnalysis(final CFGNode.DummyNode rootNode, final Map<Integer, DFGNode> argumentRegisters) {
 		final boolean[] earlyFinish = new boolean[1];
 		earlyFinish[0] = true;
+		final int[] freeRegister = new int[1];
+		freeRegister[0] = DFGIterator.maxUsedRegister(rootNode) + 1;
+		
 		while(earlyFinish[0]) {
 			earlyFinish[0] = false;
 
@@ -55,7 +58,7 @@ public class ForallToForOptimisationStage {
 							}
 
 							if(allAreRanges) {
-								replaceForAllWithFor(loop, listCreationBytecodes);
+								replaceForAllWithFor(loop, listCreationBytecodes, freeRegister);
 								earlyFinish[0] = true;
 
 
@@ -76,6 +79,9 @@ public class ForallToForOptimisationStage {
 	public static void processAfterAnalysis(final CFGNode.DummyNode rootNode, final LoopAnalyserResult analyserResult, final Map<Integer, DFGNode> argumentRegisters) {
 		final boolean[] earlyFinish = new boolean[1];
 		earlyFinish[0] = true;
+		final int[] freeRegister = new int[1];
+		freeRegister[0] = DFGIterator.maxUsedRegister(rootNode) + 1;
+		
 		while(earlyFinish[0]) {
 			earlyFinish[0] = false;
 
@@ -86,7 +92,7 @@ public class ForallToForOptimisationStage {
 						CFGNode.ForLoopNode loop = (CFGNode.ForLoopNode)node;
 						
 						if(analyserResult.loopCompatabilities.get(loop) == LoopType.CPU_EXPLICIT) {
-							replaceForWithForAll(loop, analyserResult);
+							replaceForWithForAll(loop, analyserResult, freeRegister);
 							
 							earlyFinish[0] = true;
 	
@@ -103,14 +109,14 @@ public class ForallToForOptimisationStage {
 		}
 	}
 	
-	private static void replaceForAllWithFor(ForAllLoopNode loop, Set<Bytecode.Binary> listCreationBytecodes) {
+	private static void replaceForAllWithFor(ForAllLoopNode loop, Set<Bytecode.Binary> listCreationBytecodes, int[] freeRegister) {
 		//------------------------
 		// Perform actual swap
 		//------------------------
 		Type.Leaf indexType = (Type.Leaf)loop.getIndexType();
 
-		int lowerRegister = DFGIterator.maxUsedRegister(loop) + 1;
-		int upperRegister = lowerRegister+1;
+		int lowerRegister = freeRegister[0]++;
+		int upperRegister = freeRegister[0]++;
 
 		for(Bytecode.Binary bytecode : listCreationBytecodes) {
 			List<Bytecode> bytecodes = ((CFGNode.VanillaCFGNode)bytecode.cfgNode).body.instructions;
@@ -134,13 +140,13 @@ public class ForallToForOptimisationStage {
 		loop.replaceWith(forLoop);
 	}
 	
-	private static void replaceForWithForAll(ForLoopNode loop, final LoopAnalyserResult analyserResult) {
+	private static void replaceForWithForAll(ForLoopNode loop, final LoopAnalyserResult analyserResult, int[] freeRegister) {
 		//------------------------
 		// Perform actual swap
 		//------------------------
 		Type.Leaf indexType = loop.getIndexType();
 
-		int listRegister = DFGIterator.maxUsedRegister(loop) + 1;
+		int listRegister = freeRegister[0]++;
 
 		CFGNode.VanillaCFGNode newVanillaNode = new CFGNode.VanillaCFGNode();
 		
