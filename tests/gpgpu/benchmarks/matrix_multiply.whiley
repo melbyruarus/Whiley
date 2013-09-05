@@ -1,7 +1,7 @@
 import * from whiley.lang.*
 import * from whiley.gpgpu.*
 
-define Matrix as {int w, int h, [[int]] data}
+define Matrix as {int w, int h, [[real]] data}
 
 public Matrix newMatrix(int start, int mod, int w, int h):
 	num = start
@@ -9,7 +9,7 @@ public Matrix newMatrix(int start, int mod, int w, int h):
 	for y in 0..h:
 		temp = []
 		for x in 0..w:
-			temp = temp + [num]
+			temp = temp + [(real)num]
 			num = (num + 1) % mod
 		data = data + [temp]
 	return {w: w, h:h, data:data}
@@ -30,7 +30,7 @@ public Matrix multiplyMatrix(Matrix one, Matrix two):
 
 	for j in 0..h:
 		for i in 0..w:
-			result = 0
+			result = 0.0
 
 			for n in 0..w:
 				result = result + oneData[j][n] * twoData[n][i]

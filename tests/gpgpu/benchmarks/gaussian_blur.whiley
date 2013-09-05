@@ -37,7 +37,7 @@ public void ::debugImage(System.Console sys, [real] image, int size):
 		x = x + 1
 
 public void ::main(System.Console sys):
-	size = 50
+	size = 200
 
 	mask,maskSize = createBlurMask(size/12)
 	image = createRealArray(size * size)
