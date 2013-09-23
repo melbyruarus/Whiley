@@ -26,7 +26,8 @@ public class RuntimeTests extends TestHarness {
 	@Test public void MandelbrotFloat() { runTest("mandelbrot_float"); }
 	@Test public void ForallOptimisationNotPossible() { runTest("ForallOptimisationNotPossible"); }
 	@Test public void ForallOptimisationPossible() { runTest("ForallOptimisationPossible"); }
-	@Ignore @Test public void TypesChanging() { runTest("TypesChanging"); }
+	@Ignore("Float to rational conversion") @Test public void TypesChanging() { runTest("TypesChanging"); }
+	@Test public void TypesChanging_Fake() { runTest("TypesChanging_Fake"); }
 	@Test public void MultipleKernels() { runTest("MultipleKernels"); }
 	@Test public void GameOfLife() { runTest("gameoflife"); }
 	@Test public void GaussianBlur() { runTest("gaussian_blur"); }
