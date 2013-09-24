@@ -1,14 +1,17 @@
 package whiley.gpgpu.OpenCL.Devices;
 
-import static org.jocl.CL.*;
+import static org.jocl.CL.CL_SUCCESS;
+import static org.jocl.CL.clGetDeviceIDs;
+import static org.jocl.CL.clGetPlatformIDs;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import whiley.gpgpu.OpenCL.Exceptions.*;
+import org.jocl.cl_device_id;
+import org.jocl.cl_platform_id;
 
-import org.jocl.*;
+import whiley.gpgpu.OpenCL.Exceptions.DeviceFetchException;
 
 public class DeviceList implements DeviceDependancy {
 	public final List<Device> devices;
@@ -42,18 +45,21 @@ public class DeviceList implements DeviceDependancy {
 //			clGetPlatformInfo(platformID, CL_PLATFORM_NAME, 1024, Pointer.to(name), null);
 //			byte version[] = new byte[1024];
 //			clGetPlatformInfo(platformID, CL_PLATFORM_VERSION, 1024, Pointer.to(version), null);
+//			System.err.println("Found Hardware (Vendor: \"" + new String(vendor) + "\", Name: \"" + new String(name) + "\", Version: \"" + new String(version) +"\")");
 
 			cl_device_id deviceIds[] = new cl_device_id[count];
 			err[0] = clGetDeviceIDs(platformID, deviceType.getRawType(), count, deviceIds, (int [])null);
-		    if(err[0] != CL_SUCCESS) {
-				throw new DeviceFetchException(err[0], "Failed to create a device group");
-		    }
-
-		    for(cl_device_id id : deviceIds) {
-		    	d.add(new Device(id, deviceType));
+		    if(err[0] == CL_SUCCESS) {
+		    	for(cl_device_id id : deviceIds) {
+			    	d.add(new Device(id, deviceType));
+		    	}
 		    }
 		}
 
+		if(d.isEmpty()) {
+			throw new DeviceFetchException(err[0], "Failed to create a device group");
+		}
+		
 	    cl_device_id dArray[] = new cl_device_id[d.size()];
 	    for(int n=0;n<d.size();n++) {
 	    	dArray[n] = d.get(n).getRawDeviceId();
